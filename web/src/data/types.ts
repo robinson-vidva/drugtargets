@@ -11,6 +11,7 @@ export interface Drug {
   drugType: string;
   maxPhase: number;
   approved: boolean;
+  approvalDate: string | null;
   pharmClass: string[];
 }
 
@@ -42,6 +43,7 @@ export interface SignTableRow {
 export interface Meta {
   otRelease: string;
   openfdaDate: string;
+  openfdaNdcDate: string;
   hgncVersion: string;
   chemblVersion: string;
   buildDate: string;
@@ -52,6 +54,14 @@ export interface Meta {
     drugTargetEdges: number;
     mechanisms: number;
     drugsWithSimilar: number;
+  };
+  pharmClassCoverage: {
+    approvedDrugs: number;
+    approvedWithPharmClass: number;
+    approvedPct: number;
+    matchedByUnii: number;
+    matchedByNameFallback: number;
+    unmatched: number;
   };
   actionTypes: string[];
   signTable: SignTableRow[];

@@ -14,6 +14,7 @@ from collections import Counter, defaultdict
 import duckdb
 
 from common import CACHE, die, load_config, log, ot_dir, out_dir
+from crosswalk import normalize_name
 from similarity import top_similar
 from signmap import action_sign, sign_table
 
@@ -113,32 +114,68 @@ def main() -> None:
     log("reading drug_molecule")
     dm_glob = str(ot_dir("drug_molecule") / "*.parquet")
     drows = con.execute(
-        f"SELECT id, name, drugType, maximumClinicalStage, synonyms "
+        f"SELECT id, name, drugType, maximumClinicalStage, synonyms, parentId "
         f"FROM read_parquet('{dm_glob}')"
     ).fetchall()
     drug_meta = {}
     drug_syns = {}
-    for did, name, dtype, stage, syns in drows:
+    parent_of: dict[str, str] = {}  # ChEMBL id -> top parent (salt -> parent); over ALL molecules
+    for did, name, dtype, stage, syns, parent in drows:
+        parent_of[did] = parent or did
         if did not in drug_id:
             continue
         drug_meta[did] = (name or did, dtype or "", (stage or "UNKNOWN"))
         drug_syns[did] = [s for s in (syns or []) if s]
 
-    pharm_by_name = json.loads((CACHE / "pharmclass_by_name.json").read_text()) if (
-        CACHE / "pharmclass_by_name.json").exists() else {}
+    def _load(name):
+        p = CACHE / name
+        return json.loads(p.read_text()) if p.exists() else {}
 
-    def pharm_for(did: str) -> list[str]:
+    pharm_by_unii = _load("pharmclass_by_unii.json")
+    pharm_by_name = _load("pharmclass_by_name.json")      # normalised-name fallback
+    unii_to_chembl = _load("unii_to_chembl.json")
+    approval_by_unii = _load("approval_by_unii.json")
+
+    # Roll UNII-keyed openFDA data up to ChEMBL (incl. salt -> parent via parentId).
+    pharm_by_chembl: dict[str, set] = defaultdict(set)
+    approval_by_chembl: dict[str, dict] = {}
+    for unii, chembls in unii_to_chembl.items():
+        classes = pharm_by_unii.get(unii)
+        appr = approval_by_unii.get(unii)
+        for c in chembls:
+            targets = {c, parent_of.get(c, c)}
+            for t in targets:
+                if classes:
+                    pharm_by_chembl[t].update(classes)
+                if appr:
+                    cur = approval_by_chembl.get(t)
+                    if cur is None:
+                        approval_by_chembl[t] = dict(appr)
+                    elif appr.get("date") and (not cur.get("date") or appr["date"] < cur["date"]):
+                        cur["date"] = appr["date"]
+
+    # provenance tally (overall + approved-only)
+    prov = {"unii": 0, "fallback": 0, "unmatched": 0}
+    prov_approved = {"unii": 0, "fallback": 0, "unmatched": 0}
+
+    def pharm_for(did: str) -> tuple[list[str], str]:
+        hit = pharm_by_chembl.get(did)
+        if hit:
+            return sorted(hit), "unii"
+        # fallback: salt-stripped, case-folded name match (UNII miss only)
         meta = drug_meta.get(did)
         cand = set()
         if meta:
-            cand.add(meta[0].strip().upper())
+            cand.add(normalize_name(meta[0]))
         for s in drug_syns.get(did, []):
-            cand.add(s.strip().upper())
+            cand.add(normalize_name(s))
         classes: set[str] = set()
         for nm in cand:
-            for c in pharm_by_name.get(nm, []):
-                classes.add(c)
-        return sorted(classes)
+            if nm:
+                classes.update(pharm_by_name.get(nm, []))
+        if classes:
+            return sorted(classes), "fallback"
+        return [], "unmatched"
 
     # ---- action-type + mechanism interning ----
     action_types = sorted({p[0] for p in pair_primary.values()})
@@ -188,13 +225,21 @@ def main() -> None:
     drugs_json = {}
     for did, di in drug_id.items():
         name, dtype, stage = drug_meta.get(did, (did, "", "UNKNOWN"))
+        classes, provenance = pharm_for(did)
+        ot_approved = stage == "APPROVAL"
+        fda = approval_by_chembl.get(did)
+        approved = ot_approved or bool(fda)
+        prov[provenance] += 1
+        if approved:
+            prov_approved[provenance] += 1
         drugs_json[di] = {
             "chembl": did,
             "name": name,
             "drugType": dtype,
             "maxPhase": STAGE_TO_PHASE.get(stage, 0),
-            "approved": stage == "APPROVAL",
-            "pharmClass": pharm_for(did),
+            "approved": approved,
+            "approvalDate": (fda or {}).get("date"),
+            "pharmClass": classes,
         }
 
     genes_json = {}
@@ -223,9 +268,17 @@ def main() -> None:
     write("mechanisms.json", mech_list)
     sim_size = write("similar.json", similar)
 
+    approved_total = sum(prov_approved.values())
+    approved_with_class = prov_approved["unii"] + prov_approved["fallback"]
+    pct = round(100.0 * approved_with_class / approved_total, 1) if approved_total else 0.0
+    log(f"pharm_class coverage: {approved_with_class}/{approved_total} approved drugs ({pct}%)")
+    log(f"  match provenance (all drugs): {prov}")
+    log(f"  match provenance (approved):  {prov_approved}")
+
     meta = {
         "otRelease": cfg["opentargets"]["release"],
         "openfdaDate": cfg["openfda"]["date"],
+        "openfdaNdcDate": cfg["openfda"]["ndc_date"],
         "hgncVersion": cfg["hgnc"]["version"],
         "chemblVersion": cfg["chembl"]["version"],
         "buildDate": datetime.date.today().isoformat(),
@@ -237,13 +290,21 @@ def main() -> None:
             "mechanisms": len(mech_list),
             "drugsWithSimilar": len(similar),
         },
+        "pharmClassCoverage": {
+            "approvedDrugs": approved_total,
+            "approvedWithPharmClass": approved_with_class,
+            "approvedPct": pct,
+            "matchedByUnii": prov["unii"],
+            "matchedByNameFallback": prov["fallback"],
+            "unmatched": prov["unmatched"],
+        },
         "actionTypes": action_types,
         "signTable": sign_table(),
         "openfdaDisclaimer": cfg["openfda"]["disclaimer"],
         "licenses": [
             {"source": "Open Targets Platform", "version": cfg["opentargets"]["release"],
              "license": cfg["opentargets"]["license"]},
-            {"source": "openFDA / Drugs@FDA", "version": cfg["openfda"]["date"],
+            {"source": "openFDA NDC + Drugs@FDA", "version": cfg["openfda"]["ndc_date"],
              "license": cfg["openfda"]["license"]},
             {"source": "ChEMBL", "version": cfg["chembl"]["version"],
              "license": cfg["chembl"]["license"]},

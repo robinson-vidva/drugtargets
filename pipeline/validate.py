@@ -91,7 +91,28 @@ def main() -> None:
     if not meta.get("signTable"):
         die("meta.signTable empty")
 
+    # pharm_class coverage stats present + consistent
+    pc = meta.get("pharmClassCoverage")
+    if not pc:
+        die("meta.pharmClassCoverage missing")
+    prov_sum = pc["matchedByUnii"] + pc["matchedByNameFallback"] + pc["unmatched"]
+    if prov_sum != len(drugs):
+        die(f"pharm_class provenance counts {prov_sum} != drug count {len(drugs)}")
+    if pc["approvedWithPharmClass"] > pc["approvedDrugs"]:
+        die("approvedWithPharmClass exceeds approvedDrugs")
+    if pc["matchedByUnii"] == 0:
+        die("no drugs matched by UNII — UNII crosswalk likely broken")
+    # drugs.json shape: pharmClass list + approvalDate field
+    for k, d in list(drugs.items())[:50]:
+        if not isinstance(d.get("pharmClass"), list):
+            die(f"drug {k} pharmClass not a list")
+        if "approvalDate" not in d:
+            die(f"drug {k} missing approvalDate field")
+
     log("VALIDATION PASSED")
+    log(f"  pharm_class: {pc['approvedWithPharmClass']}/{pc['approvedDrugs']} approved "
+        f"({pc['approvedPct']}%) | UNII={pc['matchedByUnii']} "
+        f"fallback={pc['matchedByNameFallback']} unmatched={pc['unmatched']}")
     log(f"  drugs={len(drugs)} genes={len(genes)} edges={edges} "
         f"similar={len(sim)} mechanisms={len(mech)}")
 

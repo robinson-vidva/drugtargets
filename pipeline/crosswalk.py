@@ -1,13 +1,16 @@
 """Phase 1 — crosswalk. Build identifier bridges used by build.py.
 
 Outputs (pipeline/cache/):
-  - gene_aliases.json   {ensembl_gene_id: [alias/prev symbols, upper-cased, deduped]}
-        Lets the frontend resolve user-typed aliases/prev symbols to the Ensembl ids
-        Open Targets uses.
-  - pharmclass_by_name.json  {UPPER_DRUG_NAME: [pharm_class strings]}
-        openFDA openfda.pharm_class_epc/_moa/_pe keyed by generic/substance name.
-        build.py matches ChEMBL drug name + synonyms against this (name-based crosswalk,
-        documented on the Methods page).
+  - gene_aliases.json       {ensembl_gene_id: [alias/prev symbols, upper-cased, deduped]}
+        Lets the frontend resolve user-typed aliases/prev symbols to OT Ensembl ids.
+  - pharmclass_by_unii.json {UNII: [pharm_class strings]}
+        openFDA pharm_class_epc/_moa/_pe keyed by openfda.unii (NDC + Drugs@FDA; primary join).
+  - pharmclass_by_name.json {NORMALISED_NAME: [pharm_class strings]}
+        Same classes keyed by salt-stripped, case-folded drug name (UNII-miss fallback only).
+  - unii_to_chembl.json     {UNII: [ChEMBL ids]}
+        From the UniChem ChEMBL<->FDA-SRS (UNII) whole-source bulk mapping.
+  - approval_by_unii.json   {UNII: {"approved": true, "date": "YYYY-MM-DD"|null}}
+        From Drugs@FDA submissions with submission_status == 'AP' (earliest AP date).
 """
 from __future__ import annotations
 
@@ -15,9 +18,26 @@ import csv
 import glob
 import json
 
-from common import CACHE, die, hgnc_path, load_config, log, openfda_dir
+from common import (CACHE, die, hgnc_path, load_config, log, openfda_dir,
+                    unichem_path)
 
 csv.field_size_limit(10_000_000)
+
+# Salt/hydrate suffixes stripped for the name-based fallback (per spec, + common hydrates).
+SALT_SUFFIXES = {
+    "MESYLATE", "HYDROCHLORIDE", "SODIUM", "SULFATE", "BESYLATE", "DIHYDROCHLORIDE",
+    "ACETATE", "CITRATE", "TARTRATE", "MALEATE", "FUMARATE", "PHOSPHATE", "SUCCINATE",
+    "MONOHYDRATE", "DIHYDRATE", "HYDRATE", "ANHYDROUS", "POTASSIUM", "CALCIUM",
+    "HYDROBROMIDE", "BROMIDE", "CHLORIDE",
+}
+
+
+def normalize_name(name: str) -> str:
+    """Upper-case, collapse whitespace, and strip trailing salt/hydrate tokens."""
+    toks = (name or "").upper().split()
+    while toks and toks[-1] in SALT_SUFFIXES:
+        toks.pop()
+    return " ".join(toks).strip()
 
 
 def build_gene_aliases() -> dict[str, list[str]]:
@@ -50,12 +70,52 @@ def build_gene_aliases() -> dict[str, list[str]]:
     return {k: sorted(v) for k, v in out.items()}
 
 
-def build_pharmclass_by_name() -> dict[str, list[str]]:
-    files = sorted(glob.glob(str(openfda_dir() / "*.json")))
+def _as_list(v) -> list:
+    if v is None:
+        return []
+    return v if isinstance(v, list) else [v]
+
+
+def _single_substance(rec: dict, of: dict) -> bool:
+    """True if the record describes ONE active drug (so its pharm_class is unambiguous).
+
+    Combination products carry 2+ active ingredients and attribute every pharm_class to
+    each ingredient — wrong to map onto a single drug, so they are excluded. A mono drug
+    may legitimately list several UNIIs (salt + parent), so UNII count is NOT used here;
+    the active-ingredient count (NDC) / substance count (Drugs@FDA) is the reliable signal.
+    """
+    ings = rec.get("active_ingredients")
+    if ings is not None:
+        return len(ings) <= 1
+    return len(of.get("substance_name") or []) <= 1
+
+
+def _record_names(rec: dict, of: dict) -> set[str]:
+    """Substance names for a record (generic/substance/active-ingredient — NOT brand)."""
+    names: set[str] = set()
+    for v in _as_list(rec.get("generic_name")):
+        names.add(str(v))
+    for ing in rec.get("active_ingredients") or []:
+        if ing and ing.get("name"):
+            names.add(str(ing["name"]))
+    for key in ("generic_name", "substance_name"):
+        for nm in of.get(key) or []:
+            names.add(str(nm))
+    return {normalize_name(n) for n in names if n}
+
+
+def build_pharmclass() -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """(by_unii, by_normalised_name) pharm_class maps from openFDA NDC + Drugs@FDA (union).
+
+    Only single-substance records contribute, to avoid combination-product leakage.
+    """
+    files = (sorted(glob.glob(str(openfda_dir("ndc") / "*.json")))
+             + sorted(glob.glob(str(openfda_dir("drugsfda") / "*.json"))))
     if not files:
-        die(f"openFDA json missing in {openfda_dir()} — run download first")
+        die(f"openFDA json missing under {openfda_dir()} — run download first")
+    by_unii: dict[str, set[str]] = {}
     by_name: dict[str, set[str]] = {}
-    n_records = 0
+    n_records = n_combo = 0
     for f in files:
         with open(f, encoding="utf-8") as fh:
             data = json.load(fh)
@@ -70,25 +130,86 @@ def build_pharmclass_by_name() -> dict[str, list[str]]:
                         classes.add(c)
             if not classes:
                 continue
-            names: set[str] = set()
-            for key in ("generic_name", "substance_name", "brand_name"):
-                for nm in of.get(key) or []:
-                    nm = nm.strip().upper()
-                    if nm:
-                        names.add(nm)
-            for nm in names:
-                by_name.setdefault(nm, set()).update(classes)
-    log(f"openFDA: scanned {n_records} records; {len(by_name)} names with pharm_class")
-    return {k: sorted(v) for k, v in by_name.items()}
+            if not _single_substance(rec, of):
+                n_combo += 1
+                continue
+            for u in of.get("unii") or []:
+                u = u.strip().upper()
+                if u:
+                    by_unii.setdefault(u, set()).update(classes)
+            for nn in _record_names(rec, of):
+                if nn:
+                    by_name.setdefault(nn, set()).update(classes)
+    log(f"openFDA NDC+Drugs@FDA: scanned {n_records} records ({n_combo} multi-substance "
+        f"skipped); {len(by_unii)} UNIIs, {len(by_name)} normalised names with pharm_class")
+    return ({k: sorted(v) for k, v in by_unii.items()},
+            {k: sorted(v) for k, v in by_name.items()})
+
+
+def build_unii_to_chembl() -> dict[str, list[str]]:
+    """Parse the UniChem src1src14 mapping (ChEMBL<TAB>UNII) into {UNII: [ChEMBL ids]}."""
+    path = unichem_path()
+    if not path.exists():
+        die(f"UniChem mapping missing: {path} — run download first")
+    out: dict[str, set[str]] = {}
+    with open(path, encoding="utf-8") as fh:
+        first = fh.readline()  # header: "From src:'1'\tTo src:'14'"
+        if "src" not in first.lower():
+            fh.seek(0)  # no header — rewind
+        for line in fh:
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) != 2:
+                continue
+            chembl, unii = parts[0].strip(), parts[1].strip().upper()
+            if chembl and unii:
+                out.setdefault(unii, set()).add(chembl)
+    log(f"UniChem: {len(out)} UNIIs mapped to ChEMBL ids")
+    return {k: sorted(v) for k, v in out.items()}
+
+
+def _iso(d: str) -> str | None:
+    d = (d or "").strip()
+    return f"{d[0:4]}-{d[4:6]}-{d[6:8]}" if len(d) == 8 and d.isdigit() else None
+
+
+def build_approval_from_drugsfda() -> dict[str, dict]:
+    """{UNII: {'approved': True, 'date': earliest AP submission date}} from Drugs@FDA."""
+    files = sorted(glob.glob(str(openfda_dir("drugsfda") / "*.json")))
+    if not files:
+        die(f"openFDA drugsfda json missing in {openfda_dir('drugsfda')} — run download first")
+    out: dict[str, dict] = {}
+    for f in files:
+        with open(f, encoding="utf-8") as fh:
+            data = json.load(fh)
+        for rec in data.get("results", []):
+            ap_dates = [s.get("submission_status_date") for s in (rec.get("submissions") or [])
+                        if s.get("submission_status") == "AP"]
+            if not ap_dates:
+                continue
+            isos = sorted([d for d in (_iso(x) for x in ap_dates) if d])
+            earliest = isos[0] if isos else None
+            for u in (rec.get("openfda") or {}).get("unii") or []:
+                u = u.strip().upper()
+                if not u:
+                    continue
+                cur = out.get(u)
+                if cur is None:
+                    out[u] = {"approved": True, "date": earliest}
+                elif earliest and (cur["date"] is None or earliest < cur["date"]):
+                    cur["date"] = earliest
+    log(f"Drugs@FDA: {len(out)} UNIIs with an approved (AP) submission")
+    return out
 
 
 def main() -> None:
     load_config()
     CACHE.mkdir(parents=True, exist_ok=True)
-    aliases = build_gene_aliases()
-    (CACHE / "gene_aliases.json").write_text(json.dumps(aliases))
-    pharm = build_pharmclass_by_name()
-    (CACHE / "pharmclass_by_name.json").write_text(json.dumps(pharm))
+    (CACHE / "gene_aliases.json").write_text(json.dumps(build_gene_aliases()))
+    by_unii, by_name = build_pharmclass()
+    (CACHE / "pharmclass_by_unii.json").write_text(json.dumps(by_unii))
+    (CACHE / "pharmclass_by_name.json").write_text(json.dumps(by_name))
+    (CACHE / "unii_to_chembl.json").write_text(json.dumps(build_unii_to_chembl()))
+    (CACHE / "approval_by_unii.json").write_text(json.dumps(build_approval_from_drugsfda()))
     log("crosswalk complete")
 
 

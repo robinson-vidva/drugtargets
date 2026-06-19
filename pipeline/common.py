@@ -32,8 +32,12 @@ def hgnc_path() -> Path:
     return RAW / "hgnc" / "hgnc_complete_set.txt"
 
 
-def openfda_dir() -> Path:
-    return RAW / "openfda"
+def openfda_dir(sub: str = "") -> Path:
+    return RAW / "openfda" / sub if sub else RAW / "openfda"
+
+
+def unichem_path() -> Path:
+    return RAW / "unichem" / "src1src14.txt"
 
 
 def log(msg: str) -> None:

@@ -4,12 +4,14 @@ Sources (verified at run time):
   - Open Targets 26.03 Parquet datasets (lists /output/ and FAILS LOUDLY if a
     configured dataset folder is missing).
   - HGNC complete set (symbol/alias/prev <-> ensembl <-> uniprot).
-  - openFDA Drugs@FDA bulk JSON (pharm_class + identifiers).
+  - openFDA NDC directory (pharm_class by UNII) + Drugs@FDA (approvals).
+  - UniChem ChEMBL<->UNII whole-source bulk mapping (src1src14).
 
 Idempotent: existing files are skipped unless --force.
 """
 from __future__ import annotations
 
+import gzip
 import io
 import re
 import sys
@@ -18,7 +20,7 @@ import zipfile
 import requests
 
 from common import (CACHE, RAW, die, hgnc_path, load_config, log, openfda_dir,
-                    ot_dir)
+                    ot_dir, unichem_path)
 
 TIMEOUT = 300
 PARQUET_RE = re.compile(r'href="([^"]+\.parquet)"')
@@ -80,18 +82,17 @@ def download_hgnc(cfg: dict, force: bool) -> None:
     download_file(cfg["hgnc"]["url"], hgnc_path(), force)
 
 
-def download_openfda(cfg: dict, force: bool) -> None:
-    log("openFDA Drugs@FDA")
-    dest_dir = openfda_dir()
+def download_openfda_endpoint(manifest: dict, endpoint: str, subdir: str, force: bool) -> None:
+    """Download all partitions of an openFDA endpoint, unzipping JSON into raw/openfda/<subdir>/."""
+    dest_dir = openfda_dir(subdir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     marker = dest_dir / ".done"
     if marker.exists() and not force:
-        log("  skip (exists): openFDA json")
+        log(f"  skip (exists): openFDA {endpoint}")
         return
-    manifest = http_get(cfg["openfda"]["manifest_url"]).json()
-    part = cfg["openfda"]["endpoint"].split("/")  # ["drug","drugsfda"]
+    part = endpoint.split("/")  # e.g. ["drug","ndc"]
     node = manifest["results"][part[0]][part[1]]
-    log(f"  export_date={node.get('export_date')} records={node.get('total_records')}")
+    log(f"  {endpoint}: export_date={node.get('export_date')} records={node.get('total_records')}")
     for i, p in enumerate(node["partitions"]):
         url = p["file"]
         log(f"  GET {url}")
@@ -99,10 +100,31 @@ def download_openfda(cfg: dict, force: bool) -> None:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             for name in zf.namelist():
                 with zf.open(name) as src:
-                    out = dest_dir / f"drugsfda-{i:04d}-{name.split('/')[-1]}"
+                    out = dest_dir / f"{subdir}-{i:04d}-{name.split('/')[-1]}"
                     with open(out, "wb") as dst:
                         dst.write(src.read())
     marker.write_text("ok\n")
+
+
+def download_openfda(cfg: dict, force: bool) -> None:
+    log("openFDA (NDC pharm_class + Drugs@FDA approvals)")
+    manifest = http_get(cfg["openfda"]["manifest_url"]).json()
+    download_openfda_endpoint(manifest, cfg["openfda"]["ndc_endpoint"], "ndc", force)
+    download_openfda_endpoint(manifest, cfg["openfda"]["endpoint"], "drugsfda", force)
+
+
+def download_unichem(cfg: dict, force: bool) -> None:
+    log("UniChem ChEMBL<->UNII mapping (src1src14)")
+    dest = unichem_path()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists() and dest.stat().st_size > 0 and not force:
+        log("  skip (exists): src1src14.txt")
+        return
+    url = cfg["unichem"]["mapping_url"]
+    log(f"  GET {url}")
+    data = http_get(url).content
+    with open(dest, "wb") as fh:
+        fh.write(gzip.decompress(data))
 
 
 def main() -> None:
@@ -113,6 +135,7 @@ def main() -> None:
     download_opentargets(cfg, force)
     download_hgnc(cfg, force)
     download_openfda(cfg, force)
+    download_unichem(cfg, force)
     log("download complete")
 
 

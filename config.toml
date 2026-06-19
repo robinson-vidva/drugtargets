@@ -19,11 +19,17 @@ datasets = [
 license = "CC0 1.0"
 
 [openfda]
-# openFDA Drugs@FDA bulk JSON (US-gov public domain). Manifest lists partitioned zips.
+# openFDA bulk JSON (US-gov public domain). Manifest lists partitioned zips.
 manifest_url = "https://api.fda.gov/download.json"
-date = "2026-06-19"           # drugsfda export_date recorded in meta.json
-endpoint = "drug/drugsfda"    # approvals + openfda.pharm_class_* + identifiers
-# Crosswalk to ChEMBL is by drug name (generic/substance) match — documented on Methods.
+# pharm_class is sourced from the NDC directory (better openfda.pharm_class_* coverage,
+# keyed by openfda.unii). Approval status/dates come from Drugs@FDA (drugsfda submissions).
+# The large SPL drug/label set is intentionally excluded for size; some approved drugs
+# (e.g. imatinib) therefore have no openFDA pharm_class.
+ndc_endpoint = "drug/ndc"        # pharm_class_epc/_moa/_pe keyed by unii
+ndc_date = "2026-06-19"          # drug-ndc export_date
+endpoint = "drug/drugsfda"       # approvals (submission_status AP) + dates
+date = "2026-06-19"              # drugsfda export_date recorded in meta.json
+# Join to ChEMBL is by UNII via UniChem, rolled salt->parent via OT parentId (see Methods).
 disclaimer = "openFDA is a beta research project and not for clinical use."
 license = "U.S. Public Domain"
 
@@ -38,6 +44,9 @@ version = "35"
 license = "CC BY-SA 3.0"
 
 [unichem]
-# Fallback crosswalk openFDA UNII/RxCUI -> ChEMBL when OT crossReferences miss.
+# UNII -> ChEMBL crosswalk via UniChem whole-source bulk mapping (matched by InChIKey).
+# src_id 1 = chembl, src_id 14 = fdasrs (FDA/USP Substance Registration System = UNII).
 api_url = "https://www.ebi.ac.uk/unichem/api/v1/compounds"
 chembl_src_id = 1
+fdasrs_src_id = 14
+mapping_url = "https://ftp.ebi.ac.uk/pub/databases/chembl/UniChem/data/wholeSourceMapping/src_id1/src1src14.txt.gz"
