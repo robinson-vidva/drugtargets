@@ -1,0 +1,58 @@
+name: Quarterly data rebuild
+
+# Regenerate the JSON artifacts from the public sources and commit them.
+# Vercel auto-deploys on push to main. The pipeline runs ONLY here (or locally),
+# never on Vercel.
+
+on:
+  schedule:
+    # 06:00 UTC on the 1st of Jan, Apr, Jul, Oct
+    - cron: '0 6 1 1,4,7,10 *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quarterly-rebuild
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pipeline dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt pytest
+
+      - name: Unit tests (sign map + IDF/cosine)
+        run: .venv/bin/python -m pytest pipeline/tests -q
+
+      - name: Run pipeline (download -> crosswalk -> build -> validate)
+        run: |
+          .venv/bin/python pipeline/download.py
+          .venv/bin/python pipeline/crosswalk.py
+          .venv/bin/python pipeline/build.py
+          .venv/bin/python pipeline/validate.py
+
+      - name: Commit regenerated artifacts
+        run: |
+          git config user.name "drugtargets-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add web/public/data
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "Quarterly data rebuild ($(date -u +%Y-%m-%d))"
+            git push
+          fi
