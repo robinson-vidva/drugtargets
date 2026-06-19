@@ -1,0 +1,11 @@
+# Keep the Vercel deploy lean: only web/ static output is needed.
+node_modules
+.venv
+pipeline
+*.parquet
+**/*.parquet
+**/*.map
+.git
+.github
+__pycache__
+*.pyc

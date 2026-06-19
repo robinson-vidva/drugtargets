@@ -1,0 +1,42 @@
+# drugtargets pipeline configuration — pinned versions (single source of truth)
+# Values here are written into meta.json and the data-dir name (v2026Q2).
+
+[release]
+data_dir = "v2026Q2"          # web/public/data/<data_dir>/
+build_label = "2026Q2"
+
+[opentargets]
+release = "26.03"
+base_url = "https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/26.03/output"
+# Datasets verified to exist in 26.03 /output/ (known_drug retired; clinical_indication added).
+datasets = [
+  "drug_molecule",
+  "drug_mechanism_of_action",
+  "clinical_indication",
+  "target",
+  "disease",
+]
+license = "CC0 1.0"
+
+[openfda]
+# openFDA Drugs@FDA bulk JSON (US-gov public domain). Manifest lists partitioned zips.
+manifest_url = "https://api.fda.gov/download.json"
+date = "2026-06-01"           # snapshot label recorded in meta.json
+endpoint = "drug/drugsfda"    # approvals + openfda.pharm_class_* + identifiers
+disclaimer = "openFDA is a beta research project and not for clinical use."
+license = "U.S. Public Domain"
+
+[hgnc]
+# HGNC complete set: symbol <-> ensembl_gene_id <-> uniprot_ids (+ alias/prev symbols).
+url = "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"
+version = "2026-06"
+license = "CC0 1.0"
+
+[chembl]
+version = "35"
+license = "CC BY-SA 3.0"
+
+[unichem]
+# Fallback crosswalk openFDA UNII/RxCUI -> ChEMBL when OT crossReferences miss.
+api_url = "https://www.ebi.ac.uk/unichem/api/v1/compounds"
+chembl_src_id = 1

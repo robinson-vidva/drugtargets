@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+pipeline/cache/
+pipeline/raw/
+*.parquet
+
+# Node
+node_modules/
+web/dist/
+*.local
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Vercel
+.vercel/
+
+# Logs
+*.log
+
+# Claude local settings
+.claude/settings.local.json
