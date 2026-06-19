@@ -21,8 +21,9 @@ license = "CC0 1.0"
 [openfda]
 # openFDA Drugs@FDA bulk JSON (US-gov public domain). Manifest lists partitioned zips.
 manifest_url = "https://api.fda.gov/download.json"
-date = "2026-06-01"           # snapshot label recorded in meta.json
+date = "2026-06-19"           # drugsfda export_date recorded in meta.json
 endpoint = "drug/drugsfda"    # approvals + openfda.pharm_class_* + identifiers
+# Crosswalk to ChEMBL is by drug name (generic/substance) match — documented on Methods.
 disclaimer = "openFDA is a beta research project and not for clinical use."
 license = "U.S. Public Domain"
 
