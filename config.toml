@@ -43,6 +43,14 @@ license = "CC0 1.0"
 version = "35"
 license = "CC BY-SA 3.0"
 
+[drugcentral]
+# WHO ATC classification + ChEMBL crosswalk (global; covers drugs openFDA EPC/MoA never will,
+# e.g. imatinib -> L01EA01). Streamed Postgres dump (struct2atc + atc + identifier tables) —
+# CI-friendly (no 25GB ChEMBL SQLite, which won't fit GitHub Actions runners).
+version = "2023-11-01"
+dump_url = "https://unmtid-shinyapps.net/download/drugcentral.dump.11012023.sql.gz"
+license = "CC BY-SA 4.0"
+
 [unichem]
 # UNII -> ChEMBL crosswalk via UniChem whole-source bulk mapping (matched by InChIKey).
 # src_id 1 = chembl, src_id 14 = fdasrs (FDA/USP Substance Registration System = UNII).

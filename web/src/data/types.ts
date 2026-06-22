@@ -12,7 +12,9 @@ export interface Drug {
   maxPhase: number;
   approved: boolean;
   approvalDate: string | null;
-  pharmClass: string[];
+  pharmClass: string[];   // openFDA EPC/MoA/PE
+  atcClass: string[];     // WHO ATC level-4 labels (DrugCentral)
+  atc: string[];          // ATC codes
 }
 
 export interface Gene {
@@ -55,13 +57,12 @@ export interface Meta {
     mechanisms: number;
     drugsWithSimilar: number;
   };
-  pharmClassCoverage: {
+  coverage: {
     approvedDrugs: number;
-    approvedWithPharmClass: number;
-    approvedPct: number;
-    matchedByUnii: number;
-    matchedByNameFallback: number;
-    unmatched: number;
+    anyClass: { count: number; pct: number };
+    pharmClass: { count: number; pct: number; byUnii: number; byNameFallback: number; unmatched: number };
+    atc: { count: number; pct: number };
+    fdaMarketed: { drugs: number; withClass: number; pct: number };
   };
   actionTypes: string[];
   signTable: SignTableRow[];

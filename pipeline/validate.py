@@ -91,28 +91,34 @@ def main() -> None:
     if not meta.get("signTable"):
         die("meta.signTable empty")
 
-    # pharm_class coverage stats present + consistent
-    pc = meta.get("pharmClassCoverage")
-    if not pc:
-        die("meta.pharmClassCoverage missing")
-    prov_sum = pc["matchedByUnii"] + pc["matchedByNameFallback"] + pc["unmatched"]
-    if prov_sum != len(drugs):
-        die(f"pharm_class provenance counts {prov_sum} != drug count {len(drugs)}")
-    if pc["approvedWithPharmClass"] > pc["approvedDrugs"]:
-        die("approvedWithPharmClass exceeds approvedDrugs")
-    if pc["matchedByUnii"] == 0:
+    # coverage stats present + consistent
+    cov = meta.get("coverage")
+    if not cov:
+        die("meta.coverage missing")
+    A = cov["approvedDrugs"]
+    for key in ("anyClass", "pharmClass", "atc"):
+        if cov[key]["count"] > A:
+            die(f"coverage.{key} count {cov[key]['count']} exceeds approvedDrugs {A}")
+    if cov["anyClass"]["count"] < max(cov["pharmClass"]["count"], cov["atc"]["count"]):
+        die("anyClass count below its components (union math wrong)")
+    if cov["pharmClass"]["byUnii"] == 0:
         die("no drugs matched by UNII — UNII crosswalk likely broken")
-    # drugs.json shape: pharmClass list + approvalDate field
+    if cov["atc"]["count"] == 0:
+        die("no drugs with ATC — DrugCentral crosswalk likely broken")
+    # drugs.json shape: pharmClass + atcClass lists, approvalDate field
     for k, d in list(drugs.items())[:50]:
-        if not isinstance(d.get("pharmClass"), list):
-            die(f"drug {k} pharmClass not a list")
+        for f in ("pharmClass", "atcClass", "atc"):
+            if not isinstance(d.get(f), list):
+                die(f"drug {k} {f} not a list")
         if "approvalDate" not in d:
             die(f"drug {k} missing approvalDate field")
 
     log("VALIDATION PASSED")
-    log(f"  pharm_class: {pc['approvedWithPharmClass']}/{pc['approvedDrugs']} approved "
-        f"({pc['approvedPct']}%) | UNII={pc['matchedByUnii']} "
-        f"fallback={pc['matchedByNameFallback']} unmatched={pc['unmatched']}")
+    log(f"  approved coverage: any-class {cov['anyClass']['count']}/{A} ({cov['anyClass']['pct']}%) "
+        f"| openFDA {cov['pharmClass']['count']} ({cov['pharmClass']['pct']}%) "
+        f"| ATC {cov['atc']['count']} ({cov['atc']['pct']}%)")
+    log(f"  FDA-marketed: {cov['fdaMarketed']['withClass']}/{cov['fdaMarketed']['drugs']} "
+        f"({cov['fdaMarketed']['pct']}%)")
     log(f"  drugs={len(drugs)} genes={len(genes)} edges={edges} "
         f"similar={len(sim)} mechanisms={len(mech)}")
 

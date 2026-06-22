@@ -19,8 +19,8 @@ import zipfile
 
 import requests
 
-from common import (CACHE, RAW, die, hgnc_path, load_config, log, openfda_dir,
-                    ot_dir, unichem_path)
+from common import (CACHE, RAW, die, drugcentral_path, hgnc_path, load_config,
+                    log, openfda_dir, ot_dir, unichem_path)
 
 TIMEOUT = 300
 PARQUET_RE = re.compile(r'href="([^"]+\.parquet)"')
@@ -127,6 +127,13 @@ def download_unichem(cfg: dict, force: bool) -> None:
         fh.write(gzip.decompress(data))
 
 
+def download_drugcentral(cfg: dict, force: bool) -> None:
+    log("DrugCentral dump (WHO ATC classification)")
+    dest = drugcentral_path()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    download_file(cfg["drugcentral"]["dump_url"], dest, force)
+
+
 def main() -> None:
     force = "--force" in sys.argv
     cfg = load_config()
@@ -136,6 +143,7 @@ def main() -> None:
     download_hgnc(cfg, force)
     download_openfda(cfg, force)
     download_unichem(cfg, force)
+    download_drugcentral(cfg, force)
     log("download complete")
 
 

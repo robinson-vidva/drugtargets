@@ -40,6 +40,10 @@ def unichem_path() -> Path:
     return RAW / "unichem" / "src1src14.txt"
 
 
+def drugcentral_path() -> Path:
+    return RAW / "drugcentral" / "drugcentral.sql.gz"
+
+
 def log(msg: str) -> None:
     print(f"[drugtargets] {msg}", flush=True)
 

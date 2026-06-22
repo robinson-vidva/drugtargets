@@ -51,9 +51,22 @@ export default function DrugPage() {
         </div>
       </div>
 
-      {drug.pharmClass.length > 0 && (
-        <div className="chip-row" style={{ marginTop: 10 }}>
-          {drug.pharmClass.map((p) => <span className="tag" key={p}>{p}</span>)}
+      {(drug.pharmClass.length > 0 || drug.atcClass.length > 0) && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {drug.pharmClass.length > 0 && (
+            <div className="chip-row">
+              <span className="muted" style={{ fontSize: '0.8rem', alignSelf: 'center' }}>openFDA:</span>
+              {drug.pharmClass.map((p) => <span className="tag" key={p}>{p}</span>)}
+            </div>
+          )}
+          {drug.atcClass.length > 0 && (
+            <div className="chip-row">
+              <span className="muted" style={{ fontSize: '0.8rem', alignSelf: 'center' }}>ATC:</span>
+              {drug.atcClass.map((p, i) => (
+                <span className="tag" key={p} title={drug.atc[i]}>{p}</span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -4,7 +4,7 @@ import { Disclaimer } from '../components/common';
 
 export default function MethodsPage() {
   const { meta } = useData();
-  const cov = meta?.pharmClassCoverage;
+  const cov = meta?.coverage;
   const pos = meta?.signTable.filter((r) => r.sign === 1) ?? [];
   const neg = meta?.signTable.filter((r) => r.sign === -1) ?? [];
   const amb = meta?.signTable.filter((r) => r.sign === 0) ?? [];
@@ -114,16 +114,20 @@ export default function MethodsPage() {
           mechanism annotations; absence of a target is not evidence of no interaction.</li>
         <li><strong>Annotated mechanism, not structure.</strong> Similarity reflects shared
           annotated targets and directions — not chemical-structure similarity or assay data.</li>
-        <li><strong>Partial pharm-class coverage.</strong> openFDA pharm_class is sourced from
-          the <strong>NDC directory + Drugs@FDA</strong>, joined to ChEMBL by <strong>UNII</strong>{' '}
-          (via UniChem) and rolled salt→parent through the molecule hierarchy, with a
-          salt-stripped name fallback for UNII misses. The large SPL <code>drug/label</code> set
-          is intentionally excluded for size, so some approved drugs (e.g.{' '}
-          <Link to="/drug/CHEMBL941">imatinib</Link>) carry no openFDA class.
-          {cov && <> Present for <strong>{cov.approvedWithPharmClass.toLocaleString()} of{' '}
-            {cov.approvedDrugs.toLocaleString()} approved drugs ({cov.approvedPct}%)</strong>{' '}
-            — {cov.matchedByUnii.toLocaleString()} matched by UNII,{' '}
-            {cov.matchedByNameFallback.toLocaleString()} by name fallback.</>}</li>
+        <li><strong>Drug classification — two sources.</strong> <em>openFDA pharm_class</em>
+          (EPC/MoA/PE) from the <strong>NDC directory + Drugs@FDA</strong>, joined to ChEMBL by{' '}
+          <strong>UNII</strong> (via UniChem) and rolled salt→parent, with a salt-stripped name
+          fallback. <em>WHO ATC</em> classification from <strong>DrugCentral</strong> (joined by
+          ChEMBL id), which covers drugs openFDA never classifies — e.g.{' '}
+          <Link to="/drug/CHEMBL941">imatinib</Link> → <code>L01EA01</code> "BCR-ABL tyrosine
+          kinase inhibitors". The large SPL <code>drug/label</code> set is intentionally excluded
+          (verified to add ~2% openFDA coverage for &gt;1 GB).
+          {cov && <> A class is present for <strong>{cov.anyClass.count.toLocaleString()} of{' '}
+            {cov.approvedDrugs.toLocaleString()} approved drugs ({cov.anyClass.pct}%)</strong>{' '}
+            — ATC {cov.atc.pct}%, openFDA {cov.pharmClass.pct}% (of which{' '}
+            {cov.pharmClass.byUnii.toLocaleString()} by UNII,{' '}
+            {cov.pharmClass.byNameFallback.toLocaleString()} by name). Among FDA-marketed drugs:{' '}
+            <strong>{cov.fdaMarketed.pct}%</strong>.</>}</li>
         <li><strong>Combination products excluded.</strong> Multi-ingredient records are skipped
           when attributing pharm_class, so a drug is not tagged with classes that belong to its
           combination partners.</li>

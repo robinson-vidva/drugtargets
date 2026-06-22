@@ -11,15 +11,18 @@ Outputs (pipeline/cache/):
         From the UniChem ChEMBL<->FDA-SRS (UNII) whole-source bulk mapping.
   - approval_by_unii.json   {UNII: {"approved": true, "date": "YYYY-MM-DD"|null}}
         From Drugs@FDA submissions with submission_status == 'AP' (earliest AP date).
+  - atc_by_chembl.json      {ChEMBL id: {"codes": [...], "classes": [ATC level-4 labels]}}
+        WHO ATC classification from DrugCentral (global; covers drugs openFDA never classifies).
 """
 from __future__ import annotations
 
 import csv
 import glob
+import gzip
 import json
 
-from common import (CACHE, die, hgnc_path, load_config, log, openfda_dir,
-                    unichem_path)
+from common import (CACHE, die, drugcentral_path, hgnc_path, load_config, log,
+                    openfda_dir, unichem_path)
 
 csv.field_size_limit(10_000_000)
 
@@ -201,6 +204,71 @@ def build_approval_from_drugsfda() -> dict[str, dict]:
     return out
 
 
+def _copy_rows(path, table: str):
+    """Yield tab-split rows of a Postgres-dump `COPY public.<table> (...) FROM stdin;` block."""
+    marker = f"COPY public.{table} "
+    with gzip.open(path, "rt", encoding="utf-8", errors="replace") as fh:
+        in_block = False
+        for line in fh:
+            if not in_block:
+                if line.startswith(marker):
+                    in_block = True
+                continue
+            if line.startswith("\\."):
+                return
+            yield line.rstrip("\n").split("\t")
+
+
+def build_atc_from_drugcentral() -> dict[str, dict]:
+    """{ChEMBL id: {'codes': [ATC7...], 'classes': [ATC level-4 labels...]}} from DrugCentral.
+
+    Single streaming pass over the Postgres dump (struct2atc + atc + identifier tables).
+    DrugCentral's `identifier` table carries the ChEMBL crosswalk, so this yields
+    ChEMBL-id-keyed ATC directly (covering drugs openFDA EPC/MoA never classifies).
+    """
+    path = drugcentral_path()
+    if not path.exists():
+        die(f"DrugCentral dump missing: {path} — run download first")
+
+    # atc7 code -> level-4 class label (fallback up the hierarchy)
+    code_label: dict[str, str] = {}
+    for r in _copy_rows(path, "atc"):
+        if len(r) < 11:
+            continue
+        code = r[1].strip()
+        label = next((x for x in (r[10], r[8], r[6], r[4]) if x and x != "\\N"), "")
+        if code:
+            code_label[code] = label
+    log(f"DrugCentral: {len(code_label)} ATC codes")
+
+    # struct_id -> set(atc7 codes)
+    struct_codes: dict[str, set] = {}
+    for r in _copy_rows(path, "struct2atc"):
+        if len(r) < 2:
+            continue
+        struct_codes.setdefault(r[0], set()).add(r[1].strip())
+
+    # struct_id -> ChEMBL id (from identifier table)
+    out: dict[str, dict] = {}
+    n_struct_chembl = 0
+    for r in _copy_rows(path, "identifier"):
+        if len(r) < 4 or r[2] != "ChEMBL_ID":
+            continue
+        chembl, struct_id = r[1].strip(), r[3]
+        codes = struct_codes.get(struct_id)
+        if not chembl or not codes:
+            continue
+        n_struct_chembl += 1
+        labels = set()
+        for c in codes:
+            lbl = code_label.get(c, "")
+            if lbl and "combination" not in lbl.lower():
+                labels.add(lbl)
+        out[chembl] = {"codes": sorted(codes), "classes": sorted(labels)}
+    log(f"DrugCentral: {n_struct_chembl} ChEMBL ids with ATC classification")
+    return out
+
+
 def main() -> None:
     load_config()
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -210,6 +278,7 @@ def main() -> None:
     (CACHE / "pharmclass_by_name.json").write_text(json.dumps(by_name))
     (CACHE / "unii_to_chembl.json").write_text(json.dumps(build_unii_to_chembl()))
     (CACHE / "approval_by_unii.json").write_text(json.dumps(build_approval_from_drugsfda()))
+    (CACHE / "atc_by_chembl.json").write_text(json.dumps(build_atc_from_drugcentral()))
     log("crosswalk complete")
 
 

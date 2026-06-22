@@ -135,6 +135,15 @@ def main() -> None:
     pharm_by_name = _load("pharmclass_by_name.json")      # normalised-name fallback
     unii_to_chembl = _load("unii_to_chembl.json")
     approval_by_unii = _load("approval_by_unii.json")
+    atc_raw = _load("atc_by_chembl.json")                 # DrugCentral WHO ATC
+
+    # ATC rolled up to parents (so a salt's ATC also tags its parent ChEMBL id).
+    atc_by_chembl: dict[str, dict] = {}
+    for c, data in atc_raw.items():
+        for t in {c, parent_of.get(c, c)}:
+            cur = atc_by_chembl.setdefault(t, {"codes": set(), "classes": set()})
+            cur["codes"].update(data.get("codes", []))
+            cur["classes"].update(data.get("classes", []))
 
     # Roll UNII-keyed openFDA data up to ChEMBL (incl. salt -> parent via parentId).
     pharm_by_chembl: dict[str, set] = defaultdict(set)
@@ -222,16 +231,28 @@ def main() -> None:
 
     # ---- emit artifacts ----
     log("writing artifacts")
+    cov = {"approved": 0, "pharm": 0, "atc": 0, "any": 0, "fdaMkt": 0, "fdaWithClass": 0}
     drugs_json = {}
     for did, di in drug_id.items():
         name, dtype, stage = drug_meta.get(did, (did, "", "UNKNOWN"))
         classes, provenance = pharm_for(did)
+        a = atc_by_chembl.get(did)
+        atc_classes = sorted(a["classes"]) if a else []
+        atc_codes = sorted(a["codes"]) if a else []
         ot_approved = stage == "APPROVAL"
         fda = approval_by_chembl.get(did)
         approved = ot_approved or bool(fda)
         prov[provenance] += 1
+        has_class = bool(classes) or bool(atc_classes)
         if approved:
             prov_approved[provenance] += 1
+            cov["approved"] += 1
+            cov["pharm"] += bool(classes)
+            cov["atc"] += bool(atc_classes)
+            cov["any"] += has_class
+        if fda:
+            cov["fdaMkt"] += 1
+            cov["fdaWithClass"] += has_class
         drugs_json[di] = {
             "chembl": did,
             "name": name,
@@ -240,6 +261,8 @@ def main() -> None:
             "approved": approved,
             "approvalDate": (fda or {}).get("date"),
             "pharmClass": classes,
+            "atcClass": atc_classes,
+            "atc": atc_codes,
         }
 
     genes_json = {}
@@ -268,12 +291,25 @@ def main() -> None:
     write("mechanisms.json", mech_list)
     sim_size = write("similar.json", similar)
 
-    approved_total = sum(prov_approved.values())
-    approved_with_class = prov_approved["unii"] + prov_approved["fallback"]
-    pct = round(100.0 * approved_with_class / approved_total, 1) if approved_total else 0.0
-    log(f"pharm_class coverage: {approved_with_class}/{approved_total} approved drugs ({pct}%)")
-    log(f"  match provenance (all drugs): {prov}")
-    log(f"  match provenance (approved):  {prov_approved}")
+    A = cov["approved"]
+    def _pct(n):
+        return round(100.0 * n / A, 1) if A else 0.0
+    fda_pct = round(100.0 * cov["fdaWithClass"] / cov["fdaMkt"], 1) if cov["fdaMkt"] else 0.0
+    coverage = {
+        "approvedDrugs": A,
+        "anyClass": {"count": cov["any"], "pct": _pct(cov["any"])},
+        "pharmClass": {
+            "count": cov["pharm"], "pct": _pct(cov["pharm"]),
+            "byUnii": prov_approved["unii"], "byNameFallback": prov_approved["fallback"],
+            "unmatched": prov_approved["unmatched"],
+        },
+        "atc": {"count": cov["atc"], "pct": _pct(cov["atc"])},
+        "fdaMarketed": {"drugs": cov["fdaMkt"], "withClass": cov["fdaWithClass"], "pct": fda_pct},
+    }
+    log(f"coverage of approved drugs ({A}): any class {cov['any']} ({_pct(cov['any'])}%) "
+        f"| openFDA pharm {cov['pharm']} ({_pct(cov['pharm'])}%) | ATC {cov['atc']} ({_pct(cov['atc'])}%)")
+    log(f"  openFDA provenance (approved): {prov_approved}")
+    log(f"  FDA-marketed: {cov['fdaWithClass']}/{cov['fdaMkt']} ({fda_pct}%)")
 
     meta = {
         "otRelease": cfg["opentargets"]["release"],
@@ -290,14 +326,7 @@ def main() -> None:
             "mechanisms": len(mech_list),
             "drugsWithSimilar": len(similar),
         },
-        "pharmClassCoverage": {
-            "approvedDrugs": approved_total,
-            "approvedWithPharmClass": approved_with_class,
-            "approvedPct": pct,
-            "matchedByUnii": prov["unii"],
-            "matchedByNameFallback": prov["fallback"],
-            "unmatched": prov["unmatched"],
-        },
+        "coverage": coverage,
         "actionTypes": action_types,
         "signTable": sign_table(),
         "openfdaDisclaimer": cfg["openfda"]["disclaimer"],
@@ -310,6 +339,8 @@ def main() -> None:
              "license": cfg["chembl"]["license"]},
             {"source": "HGNC", "version": cfg["hgnc"]["version"], "license": cfg["hgnc"]["license"]},
             {"source": "UniChem", "version": "REST", "license": "EMBL-EBI"},
+            {"source": "DrugCentral (WHO ATC)", "version": cfg["drugcentral"]["version"],
+             "license": cfg["drugcentral"]["license"]},
         ],
     }
     write("meta.json", meta)
