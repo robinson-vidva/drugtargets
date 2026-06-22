@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useData } from '../data/DataContext';
 import { booleanGeneQuery, type BoolOp } from '../lib/booleanQuery';
-import { Disclaimer, EmptyState } from '../components/common';
+import { downloadCSV } from '../lib/csv';
+import { Disclaimer, EmptyState, phaseLabel } from '../components/common';
 
 interface Token { geneId: number; symbol: string; }
 
@@ -13,6 +14,9 @@ export default function GeneQueryPage() {
   const [op, setOp] = useState<BoolOp>('AND');
   const [text, setText] = useState('');
   const [active, setActive] = useState(0);
+  const [approvedOnly, setApprovedOnly] = useState(false);
+  const [minPhase, setMinPhase] = useState(0);
+  const [drugType, setDrugType] = useState('');
   const initedRef = useRef(false);
 
   // Parse URL -> tokens on first load.
@@ -84,6 +88,26 @@ export default function GeneQueryPage() {
       .sort((a, b) => (b.drug.maxPhase - a.drug.maxPhase) || a.drug.name.localeCompare(b.drug.name));
   }, [geneDrugs, drugs, tokens, op]);
 
+  const drugTypes = useMemo(
+    () => [...new Set(results.map((r) => r.drug.drugType).filter(Boolean))].sort(),
+    [results]);
+
+  const filtered = useMemo(() => results.filter(({ drug }) =>
+    (!approvedOnly || drug.approved)
+    && drug.maxPhase >= minPhase
+    && (!drugType || drug.drugType === drugType)
+  ), [results, approvedOnly, minPhase, drugType]);
+
+  function exportCsv() {
+    downloadCSV(
+      `drugtargets_${tokens.map((t) => t.symbol).join('-')}_${op}.csv`,
+      ['drug', 'chembl', 'drugType', 'maxPhase', 'approved', 'pharmClass', 'atcClass'],
+      filtered.map(({ drug }) => [
+        drug.name, drug.chembl, drug.drugType, drug.maxPhase, drug.approved,
+        drug.pharmClass.join('; '), drug.atcClass.join('; '),
+      ]));
+  }
+
   return (
     <div>
       <h1>Boolean gene query</h1>
@@ -135,28 +159,55 @@ export default function GeneQueryPage() {
         <>
           <div className="spread" style={{ marginBottom: 10 }}>
             <span className="muted">
-              {results.length.toLocaleString()} drug{results.length === 1 ? '' : 's'} target{' '}
-              {tokens.map((t) => t.symbol).join(` ${op} `)}
+              {filtered.length.toLocaleString()}
+              {filtered.length !== results.length && ` of ${results.length.toLocaleString()}`} drug
+              {filtered.length === 1 ? '' : 's'} target {tokens.map((t) => t.symbol).join(` ${op} `)}
             </span>
+            {filtered.length > 0 && (
+              <button className="btn secondary" onClick={exportCsv}>Export CSV</button>
+            )}
           </div>
+
+          <div className="row filterbar" style={{ marginBottom: 12 }}>
+            <label className="filter-check">
+              <input type="checkbox" checked={approvedOnly}
+                onChange={(e) => setApprovedOnly(e.target.checked)} /> Approved only
+            </label>
+            <label className="filter-sel">Min phase
+              <select value={minPhase} onChange={(e) => setMinPhase(Number(e.target.value))}>
+                <option value={0}>Any</option>
+                <option value={1}>Phase 1+</option>
+                <option value={2}>Phase 2+</option>
+                <option value={3}>Phase 3+</option>
+                <option value={4}>Approved</option>
+              </select>
+            </label>
+            <label className="filter-sel">Type
+              <select value={drugType} onChange={(e) => setDrugType(e.target.value)}>
+                <option value="">All</option>
+                {drugTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
+          </div>
+
           <Disclaimer />
-          {results.length === 0 ? (
-            <EmptyState>No drugs match this combination.</EmptyState>
+          {filtered.length === 0 ? (
+            <EmptyState>No drugs match {results.length === 0 ? 'this combination' : 'these filters'}.</EmptyState>
           ) : (
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Drug</th><th>Type</th><th>Max phase</th><th>Status</th><th>Pharm class</th></tr>
+                  <tr><th>Drug</th><th>Type</th><th>Max phase</th><th>Status</th><th>Class</th></tr>
                 </thead>
                 <tbody>
-                  {results.map(({ id, drug }) => (
+                  {filtered.map(({ id, drug }) => (
                     <tr key={id}>
                       <td><Link to={`/drug/${encodeURIComponent(drug.chembl)}`}>{drug.name}</Link>
                         <div className="muted mono" style={{ fontSize: '0.8rem' }}>{drug.chembl}</div></td>
                       <td>{drug.drugType || '—'}</td>
-                      <td>{drug.maxPhase || '—'}</td>
+                      <td>{phaseLabel(drug.maxPhase)}</td>
                       <td>{drug.approved ? <span className="badge activate">Approved</span> : <span className="tag">Investigational</span>}</td>
-                      <td><div className="pill-list">{drug.pharmClass.slice(0, 3).map((p) => <span className="tag" key={p}>{p}</span>)}</div></td>
+                      <td><div className="pill-list">{(drug.pharmClass.length ? drug.pharmClass : drug.atcClass.length ? drug.atcClass : drug.derivedClass).slice(0, 2).map((p) => <span className="tag" key={p}>{p}</span>)}</div></td>
                     </tr>
                   ))}
                 </tbody>

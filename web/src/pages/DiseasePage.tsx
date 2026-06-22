@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useData } from '../data/DataContext';
 import type { DrugIndicationsMap } from '../data/types';
-import { Disclaimer, EmptyState, Loading, PhaseTag } from '../components/common';
+import { downloadCSV } from '../lib/csv';
+import { Disclaimer, EmptyState, Loading, PhaseTag, phaseLabel } from '../components/common';
 
 export default function DiseasePage() {
   const { efo = '' } = useParams();
@@ -48,7 +49,18 @@ export default function DiseasePage() {
       </div>
       <Disclaimer />
 
-      <h2>Drugs studied or approved for this indication</h2>
+      <div className="spread">
+        <h2>Drugs studied or approved for this indication</h2>
+        {rows.length > 0 && (
+          <button className="btn secondary" onClick={() => downloadCSV(
+            `drugtargets_${disease.efo}.csv`,
+            ['drug', 'chembl', 'drugType', 'stage'],
+            rows.map(({ id, phase }) => {
+              const d = drugs[String(id)];
+              return [d.name, d.chembl, d.drugType, phaseLabel(phase)];
+            }))}>Export CSV</button>
+        )}
+      </div>
       {err ? <EmptyState>Failed to load indications: {err}</EmptyState>
         : !ind ? <Loading label="Loading indications…" />
         : rows.length === 0 ? <EmptyState>No drugs in the dataset for this disease.</EmptyState>
