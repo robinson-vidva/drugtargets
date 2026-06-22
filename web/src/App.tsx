@@ -13,7 +13,10 @@ function Header() {
   return (
     <header className="site-header">
       <div className="inner">
-        <NavLink to="/" className="brand">drug<span>targets</span></NavLink>
+        <NavLink to="/" className="brand">
+          <img src="/favicon.png" alt="" className="brand-logo" />
+          <span className="brand-word">drug<span>targets</span></span>
+        </NavLink>
         <nav className="nav">
           <NavLink to="/" end>Home</NavLink>
           <NavLink to="/genes">Gene query</NavLink>

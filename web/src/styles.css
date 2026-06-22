@@ -48,8 +48,11 @@ a:hover { text-decoration: underline; }
   display: flex; align-items: center; gap: 18px;
   height: 60px; max-width: var(--maxw); margin: 0 auto; padding: 0 20px;
 }
-.brand { font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em; color: var(--text); }
-.brand span { color: var(--accent); }
+.brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em; color: var(--text); }
+.brand:hover { text-decoration: none; }
+.brand-logo { height: 26px; width: 26px; object-fit: contain; display: block; }
+.brand-word { color: var(--text); }
+.brand-word span { color: var(--accent); }
 .nav { display: flex; gap: 16px; margin-left: auto; }
 .nav a { color: var(--muted); font-size: 0.95rem; }
 .nav a.active, .nav a:hover { color: var(--text); text-decoration: none; }
