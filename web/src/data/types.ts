@@ -59,6 +59,9 @@ export interface Meta {
     drugsWithSimilar: number;
     diseases: number;
     drugIndicationPairs: number;
+    drugsWithStructural: number;
+    drugsWithRepurposing: number;
+    geneDiseaseAssociations: number;
   };
   coverage: {
     approvedDrugs: number;
@@ -98,6 +101,18 @@ export type IndicationRow = [DiseaseId, number];
 export type DiseasesMap = Record<string, Disease>;
 export type DrugIndicationsMap = Record<string, IndicationRow[]>;
 export type DiseaseDrugsMap = Record<string, DrugId[]>;
+
+// [otherDrugId, tanimoto(0..1)]
+export type StructuralRow = [DrugId, number];
+export type StructuralMap = Record<string, StructuralRow[]>;
+
+// [diseaseId, score, viaDrugIds, sharedGeneIds, geneticSupport(0..1)]
+export type RepurposingRow = [DiseaseId, number, DrugId[], GeneId[], number];
+export type RepurposingMap = Record<string, RepurposingRow[]>;
+
+// [diseaseId, associationScore(0..1)]
+export type GeneDiseaseRow = [DiseaseId, number];
+export type GeneDiseasesMap = Record<string, GeneDiseaseRow[]>;
 
 export type Direction = 'activate' | 'inhibit' | 'ambiguous';
 

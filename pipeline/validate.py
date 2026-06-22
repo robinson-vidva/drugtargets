@@ -7,7 +7,8 @@ from common import die, load_config, log, out_dir
 
 REQUIRED = ["drugs.json", "genes.json", "drug_targets.json", "gene_drugs.json",
             "idf.json", "similar.json", "mechanisms.json", "meta.json",
-            "diseases.json", "drug_indications.json", "disease_drugs.json"]
+            "diseases.json", "drug_indications.json", "disease_drugs.json",
+            "gene_diseases.json", "structural_similar.json", "repurposing.json"]
 
 
 def main() -> None:
@@ -97,6 +98,34 @@ def main() -> None:
         for d in ds:
             if d not in drug_ids:
                 die(f"disease_drugs[{dis}] references unknown drug {d}")
+
+    # structural similarity + repurposing + gene-disease integrity
+    struct, repo, gene_dis = (J["structural_similar.json"], J["repurposing.json"],
+                              J["gene_diseases.json"])
+    for d, neigh in struct.items():
+        if int(d) not in drug_ids:
+            die(f"structural_similar unknown drug {d}")
+        for other, t in neigh:
+            if other not in drug_ids or not (0.0 <= t <= 1.0):
+                die(f"structural_similar[{d}] bad entry {other},{t}")
+    for d, hyps in repo.items():
+        if int(d) not in drug_ids:
+            die(f"repurposing unknown drug {d}")
+        for dz, score, via, shared, support in hyps:
+            if dz not in disease_ids:
+                die(f"repurposing[{d}] unknown disease {dz}")
+            if any(v not in drug_ids for v in via):
+                die(f"repurposing[{d}] unknown via-drug")
+            if any(g not in gene_ids for g in shared):
+                die(f"repurposing[{d}] unknown shared gene")
+            if not (0.0 <= support <= 1.0):
+                die(f"repurposing[{d}] bad genetic support {support}")
+    for g, rows in gene_dis.items():
+        if int(g) not in gene_ids:
+            die(f"gene_diseases unknown gene {g}")
+        for dz, s in rows:
+            if dz not in disease_ids or not (0.0 <= s <= 1.0):
+                die(f"gene_diseases[{g}] bad entry {dz},{s}")
 
     # meta counts cross-check
     c = meta["counts"]

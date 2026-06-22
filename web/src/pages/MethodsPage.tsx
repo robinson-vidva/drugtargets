@@ -91,6 +91,32 @@ export default function MethodsPage() {
         <li>If instead Drug C <em>activates</em> T1, cos(B, C) = −1 → similarity 0; T1 is discordant.</li>
       </ul>
 
+      {/* ---- Repurposing ---- */}
+      <h2 id="repurposing">Repurposing hypotheses</h2>
+      <p>
+        For a drug <em>A</em>, we take its target-similar drugs <em>B</em> (signed cosine ≥ 0.6),
+        collect the diseases each <em>B</em> is <strong>approved or in late-phase</strong> trials
+        for, and drop any disease <em>A</em> is already indicated for. Each candidate disease is
+        scored by Σ similarity(A,B) (approved indications weighted higher), annotated with the
+        shared concordant targets, and given a <strong>genetic support</strong> value = the
+        maximum Open Targets target–disease association between <em>A</em>'s targets and that
+        disease. These are <strong>computational hypotheses</strong>, not evidence of efficacy.
+      </p>
+      <p className="muted">
+        <strong>On validation:</strong> repoDB's public download is not currently reachable, so
+        "already known" is determined natively from Open Targets clinical indications (a drug's
+        existing indications at any phase are excluded), and genetic plausibility comes from the
+        Open Targets association scores above — avoiding the identifier-mapping loss a repoDB
+        cross-reference would introduce.
+      </p>
+
+      <h2 id="structure">Structural similarity</h2>
+      <p className="muted">
+        A second, independent similarity axis: ECFP4 (Morgan radius-2, 2048-bit) fingerprints
+        from each drug's canonical SMILES, compared by Tanimoto. Useful as a cross-check —
+        target-similar but structurally distinct drugs are often the more interesting leads.
+      </p>
+
       {/* ---- Sign table ---- */}
       <h2 id="sign-table">Action-type → sign table</h2>
       <p className="muted">Derived from ChEMBL action types. The full mapping is auditable below.</p>

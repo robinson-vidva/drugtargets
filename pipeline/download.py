@@ -19,8 +19,11 @@ import zipfile
 
 import requests
 
-from common import (CACHE, RAW, die, drugcentral_path, hgnc_path, iuphar_dir,
-                    load_config, log, openfda_dir, ot_dir, unichem_path)
+import duckdb
+
+from common import (CACHE, RAW, association_path, die, drugcentral_path,
+                    hgnc_path, iuphar_dir, load_config, log, openfda_dir,
+                    ot_dir, unichem_path)
 
 TIMEOUT = 300
 PARQUET_RE = re.compile(r'href="([^"]+\.parquet)"')
@@ -134,6 +137,41 @@ def download_drugcentral(cfg: dict, force: bool) -> None:
     download_file(cfg["drugcentral"]["dump_url"], dest, force)
 
 
+def download_association(cfg: dict, force: bool) -> None:
+    """Filter OT target-disease association remotely (httpfs) into a compact local parquet."""
+    log("Open Targets target-disease association (httpfs filter)")
+    dest = association_path()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists() and dest.stat().st_size > 0 and not force:
+        log("  skip (exists): assoc.parquet")
+        return
+    base = f"{cfg['opentargets']['base_url'].rstrip('/')}/{cfg['association']['dataset']}"
+    files = [f"{base}/{fn}" for fn in list_parquet(base)]
+    thr = cfg["association"]["score_threshold"]
+    log(f"  {len(files)} remote files; filtering associationScore >= {thr} (projection: 3 cols)")
+    con = duckdb.connect()
+    con.execute("INSTALL httpfs; LOAD httpfs;")
+    con.execute("CREATE TABLE assoc(diseaseId VARCHAR, targetId VARCHAR, "
+                "associationScore DOUBLE, evidenceCount BIGINT)")
+    # Read file-by-file (one connection each) with retries — robust against EBI drops.
+    for i, url in enumerate(files):
+        for attempt in range(4):
+            try:
+                con.execute(
+                    f"INSERT INTO assoc SELECT diseaseId, targetId, associationScore, "
+                    f"evidenceCount FROM read_parquet('{url}') WHERE associationScore >= {thr}")
+                break
+            except Exception as e:  # noqa: BLE001
+                if attempt == 3:
+                    die(f"association file failed after retries: {url}\n{e}")
+                log(f"  retry {attempt+1} for file {i}")
+        if i % 10 == 0:
+            log(f"  ...{i+1}/{len(files)} files")
+    con.execute(f"COPY (SELECT * FROM assoc) TO '{dest}' (FORMAT parquet)")
+    n = con.execute("SELECT count(*) FROM assoc").fetchone()[0]
+    log(f"  wrote {n} associations -> {dest} ({dest.stat().st_size/1e6:.1f} MB)")
+
+
 def download_iuphar(cfg: dict, force: bool) -> None:
     log("Guide to Pharmacology (IUPHAR) interactions + ligands")
     download_file(cfg["iuphar"]["interactions_url"], iuphar_dir() / "interactions.csv", force)
@@ -151,6 +189,7 @@ def main() -> None:
     download_unichem(cfg, force)
     download_drugcentral(cfg, force)
     download_iuphar(cfg, force)
+    download_association(cfg, force)
     log("download complete")
 
 

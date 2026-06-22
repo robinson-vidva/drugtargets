@@ -43,6 +43,13 @@ license = "CC0 1.0"
 version = "35"
 license = "CC BY-SA 3.0"
 
+[association]
+# Open Targets target-disease association (overall, direct). Read via DuckDB httpfs and
+# filtered to associationScore >= threshold + 3 columns (drops the large timeseries struct),
+# so no multi-hundred-MB download. Grounds repurposing hypotheses in genetic/known evidence.
+dataset = "association_overall_direct"
+score_threshold = 0.1
+
 [iuphar]
 # Guide to Pharmacology (IUPHAR/BPS) — curated ligand-target interactions WITH direction.
 # Additive signed drug-target edges; join by ligand ChEMBL id + Target Ensembl Gene ID.

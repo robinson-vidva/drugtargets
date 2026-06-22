@@ -48,6 +48,10 @@ def iuphar_dir() -> Path:
     return RAW / "iuphar"
 
 
+def association_path() -> Path:
+    return RAW / "association" / "assoc.parquet"
+
+
 def log(msg: str) -> None:
     print(f"[drugtargets] {msg}", flush=True)
 

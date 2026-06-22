@@ -5,6 +5,7 @@ import type { DrugTargetsMap, Mechanisms, IndicationRow } from '../data/types';
 import { signToDirection } from '../data/types';
 import { Disclaimer, DirectionBadge, EmptyState, Loading, PhaseTag } from '../components/common';
 import { SimilarDrugs } from '../components/SimilarDrugs';
+import { RepurposingHypotheses, StructuralSimilar } from '../components/Repurposing';
 
 export default function DrugPage() {
   const { chembl = '' } = useParams();
@@ -150,7 +151,11 @@ export default function DrugPage() {
         </>
       )}
 
+      <RepurposingHypotheses drugId={drugId} />
+
       <SimilarDrugs drugId={drugId} />
+
+      <StructuralSimilar drugId={drugId} />
     </div>
   );
 }

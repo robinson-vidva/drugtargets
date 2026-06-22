@@ -13,7 +13,8 @@ from collections import defaultdict
 
 import duckdb
 
-from common import CACHE, die, load_config, log, ot_dir, out_dir
+from common import (CACHE, association_path, die, load_config, log, ot_dir,
+                    out_dir)
 from crosswalk import normalize_name
 from graph import build_pairs
 from similarity import top_similar
@@ -63,16 +64,19 @@ def main() -> None:
     log("reading drug_molecule")
     dm_glob = str(ot_dir("drug_molecule") / "*.parquet")
     drows = con.execute(
-        f"SELECT id, name, drugType, maximumClinicalStage, synonyms, parentId "
+        f"SELECT id, name, drugType, maximumClinicalStage, synonyms, parentId, canonicalSmiles "
         f"FROM read_parquet('{dm_glob}')"
     ).fetchall()
     parent_of: dict[str, str] = {}       # ChEMBL id -> top parent (salt -> parent)
     drug_meta: dict[str, tuple] = {}     # id -> (name, drugType, stage), over ALL molecules
     drug_syns: dict[str, list] = {}
-    for did, name, dtype, stage, syns, parent in drows:
+    smiles_of: dict[str, str] = {}       # ChEMBL id -> canonical SMILES (for structural sim)
+    for did, name, dtype, stage, syns, parent, smiles in drows:
         parent_of[did] = parent or did
         drug_meta[did] = (name or did, dtype or "", (stage or "UNKNOWN"))
         drug_syns[did] = [s for s in (syns or []) if s]
+        if smiles:
+            smiles_of[did] = smiles
 
     def canon(c: str) -> str:
         return parent_of.get(c, c)
@@ -348,6 +352,67 @@ def main() -> None:
     log(f"{len(diseases_json)} diseases, "
         f"{sum(len(v) for v in drug_indications.values())} drug-indication pairs")
 
+    # ---- target-disease genetic association (OT) ----
+    target_disease: dict[int, dict] = defaultdict(dict)  # geneInt -> {diseaseInt: score}
+    if association_path().exists():
+        log("reading target-disease association")
+        for tid, dz_efo, score in con.execute(
+                f"SELECT targetId, diseaseId, associationScore "
+                f"FROM read_parquet('{association_path()}')").fetchall():
+            gi, dz = gene_id.get(tid), disease_id.get(dz_efo)
+            if gi is not None and dz is not None and score > target_disease[gi].get(dz, 0):
+                target_disease[gi][dz] = score
+    gene_diseases = {gi: sorted(([dz, round(s, 3)] for dz, s in m.items()),
+                                key=lambda r: -r[1])[:10]
+                     for gi, m in target_disease.items()}
+    log(f"genetic association: {len(gene_diseases)} targets linked to in-set diseases")
+
+    # ---- chemical-structure similarity (RDKit Morgan/Tanimoto) ----
+    structural = {}
+    try:
+        from structure import morgan_fingerprints, top_structural
+        smiles_by_drug = {drug_id[c]: smiles_of[c] for c in drug_id if c in smiles_of}
+        log(f"computing structural similarity over {len(smiles_by_drug)} drugs with SMILES")
+        structural = top_structural(morgan_fingerprints(smiles_by_drug),
+                                    top_n=20, min_sim=0.4, log=log)
+    except Exception as e:  # noqa: BLE001 — structural sim is optional enrichment
+        log(f"structural similarity skipped: {e}")
+
+    # ---- repurposing hypotheses ----
+    # A is a candidate for disease D if a similar drug B (shared concordant targets) is
+    # approved/late-phase for D and A is not already indicated for D. Genetic support =
+    # max OT association between A's targets and D.
+    log("computing repurposing hypotheses")
+    indicated = {di: {dz for dz, _p in rows} for di, rows in drug_indications.items()}
+    drug_genes = {di: {gi for gi, _ac, sign, _m in rows if sign != 0}
+                  for di, rows in drug_targets.items()}
+    repurposing = {}
+    for di, neighbors in similar.items():
+        own = indicated.get(di, set())
+        cand: dict[int, dict] = {}
+        for other, score, conc, _disc in neighbors:
+            if score < 0.6:
+                continue
+            for dz, phase in drug_indications.get(other, []):
+                if phase < 3 or dz in own:
+                    continue
+                c = cand.setdefault(dz, {"score": 0.0, "via": [], "shared": set()})
+                c["score"] += score * (1.0 if phase >= 4 else 0.6)
+                if len(c["via"]) < 3:
+                    c["via"].append(other)
+                c["shared"].update(conc)
+        if not cand:
+            continue
+        my_genes = drug_genes.get(di, set())
+        hyps = []
+        for dz, c in cand.items():
+            support = max((target_disease[g].get(dz, 0.0) for g in my_genes), default=0.0)
+            hyps.append([dz, round(c["score"], 3), c["via"],
+                         sorted(c["shared"])[:8], round(support, 3)])
+        hyps.sort(key=lambda r: (-(r[1] + r[4]), r[0]))
+        repurposing[di] = hyps[:15]
+    log(f"repurposing: {len(repurposing)} drugs with >=1 hypothesis")
+
     def write(name: str, obj) -> int:
         path = out / name
         path.write_text(json.dumps(obj, separators=(",", ":")))
@@ -364,6 +429,9 @@ def main() -> None:
     write("diseases.json", diseases_json)
     write("drug_indications.json", {di: rows for di, rows in sorted(drug_indications.items())})
     write("disease_drugs.json", {e: sorted(ds) for e, ds in sorted(disease_drugs.items())})
+    write("gene_diseases.json", {gi: gene_diseases[gi] for gi in sorted(gene_diseases)})
+    write("structural_similar.json", {di: structural[di] for di in sorted(structural)})
+    write("repurposing.json", {di: repurposing[di] for di in sorted(repurposing)})
     sim_size = write("similar.json", similar)
 
     A = cov["approved"]
@@ -403,6 +471,9 @@ def main() -> None:
             "drugsWithSimilar": len(similar),
             "diseases": len(diseases_json),
             "drugIndicationPairs": sum(len(v) for v in drug_indications.values()),
+            "drugsWithStructural": len(structural),
+            "drugsWithRepurposing": len(repurposing),
+            "geneDiseaseAssociations": sum(len(v) for v in gene_diseases.values()),
         },
         "coverage": coverage,
         "sources": sources_stat,

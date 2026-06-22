@@ -7,6 +7,7 @@ import type {
   DrugsMap, GenesMap, GeneDrugsMap, IdfMap, Meta,
   DrugTargetsMap, SimilarMap, Mechanisms,
   DiseasesMap, DrugIndicationsMap, DiseaseDrugsMap,
+  StructuralMap, RepurposingMap, GeneDiseasesMap,
 } from './types';
 
 export const DATA_DIR = 'v2026Q2';
@@ -49,6 +50,9 @@ interface DataContextValue extends Partial<EagerData> {
   loadMechanisms: () => Promise<Mechanisms>;
   loadDrugIndications: () => Promise<DrugIndicationsMap>;
   loadDiseaseDrugs: () => Promise<DiseaseDrugsMap>;
+  loadStructural: () => Promise<StructuralMap>;
+  loadRepurposing: () => Promise<RepurposingMap>;
+  loadGeneDiseases: () => Promise<GeneDiseasesMap>;
 }
 
 const Ctx = createContext<DataContextValue | null>(null);
@@ -63,6 +67,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const mechRef = useRef<Promise<Mechanisms> | null>(null);
   const indRef = useRef<Promise<DrugIndicationsMap> | null>(null);
   const ddRef = useRef<Promise<DiseaseDrugsMap> | null>(null);
+  const structRef = useRef<Promise<StructuralMap> | null>(null);
+  const repoRef = useRef<Promise<RepurposingMap> | null>(null);
+  const gdRef = useRef<Promise<GeneDiseasesMap> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,6 +155,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     loadDiseaseDrugs: () => {
       if (!ddRef.current) ddRef.current = getJSON<DiseaseDrugsMap>('disease_drugs.json');
       return ddRef.current;
+    },
+    loadStructural: () => {
+      if (!structRef.current) structRef.current = getJSON<StructuralMap>('structural_similar.json');
+      return structRef.current;
+    },
+    loadRepurposing: () => {
+      if (!repoRef.current) repoRef.current = getJSON<RepurposingMap>('repurposing.json');
+      return repoRef.current;
+    },
+    loadGeneDiseases: () => {
+      if (!gdRef.current) gdRef.current = getJSON<GeneDiseasesMap>('gene_diseases.json');
+      return gdRef.current;
     },
   }), [eager, error]);
 
