@@ -14,7 +14,7 @@ export function buildVector(targets: TargetRow[], idf: IdfMap): SparseVec {
 }
 
 export function dot(a: SparseVec, b: SparseVec): number {
-  let [small, big] = a.size <= b.size ? [a, b] : [b, a];
+  const [small, big] = a.size <= b.size ? [a, b] : [b, a];
   let s = 0;
   for (const [g, w] of small) {
     const o = big.get(g);

@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes } from 'react-router-dom';
 import { useData } from './data/DataContext';
 import { ErrorState, Loading } from './components/common';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import HomePage from './pages/HomePage';
 import GeneQueryPage from './pages/GeneQueryPage';
 import DrugPage from './pages/DrugPage';
@@ -51,6 +52,7 @@ export default function App() {
           ) : loading ? (
             <Loading label="Loading datasets…" />
           ) : (
+            <ErrorBoundary>
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/genes" element={<GeneQueryPage />} />
@@ -59,6 +61,7 @@ export default function App() {
               <Route path="/methods" element={<MethodsPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
+            </ErrorBoundary>
           )}
         </div>
       </main>

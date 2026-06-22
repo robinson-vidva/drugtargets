@@ -17,14 +17,15 @@ export default function GeneQueryPage() {
   const [approvedOnly, setApprovedOnly] = useState(false);
   const [minPhase, setMinPhase] = useState(0);
   const [drugType, setDrugType] = useState('');
-  const initedRef = useRef(false);
+  const lastQRef = useRef<string | null>(null);
 
-  // Parse URL -> tokens on first load.
+  // URL -> tokens. Re-parses on EXTERNAL url changes (shared link, in-app gene-link or
+  // search-box navigation), but skips echoes of our own tokens->URL writes (lastQRef).
   useEffect(() => {
-    if (initedRef.current || !genes || !symbolToGeneId) return;
-    initedRef.current = true;
+    if (!genes || !symbolToGeneId) return;
     const q = params.get('q') ?? '';
-    if (!q) return;
+    if (q === lastQRef.current) return;
+    lastQRef.current = q;
     const detectedOp: BoolOp = /\bOR\b/i.test(q) ? 'OR' : 'AND';
     const parts = q.split(/\b(?:AND|OR)\b/i).map((s) => s.trim()).filter(Boolean);
     const resolved: Token[] = [];
@@ -36,17 +37,14 @@ export default function GeneQueryPage() {
     }
     setOp(detectedOp);
     setTokens(resolved);
-  }, [genes, symbolToGeneId, params]);
+  }, [params, genes, symbolToGeneId]);
 
-  // Sync tokens/op -> URL.
+  // tokens/op -> URL (shareable). lastQRef marks our write so the effect above ignores it.
   useEffect(() => {
-    if (!initedRef.current) return;
-    if (tokens.length === 0) {
-      if (params.get('q')) setParams({}, { replace: true });
-      return;
-    }
-    const q = tokens.map((t) => t.symbol).join(` ${op} `);
-    if (q !== params.get('q')) setParams({ q }, { replace: true });
+    const q = tokens.length ? tokens.map((t) => t.symbol).join(` ${op} `) : '';
+    if (q === (params.get('q') ?? '')) return;
+    lastQRef.current = q;
+    setParams(q ? { q } : {}, { replace: true });
   }, [tokens, op]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const suggestions = useMemo(() => {
