@@ -4,7 +4,7 @@ import { useData } from '../data/DataContext';
 
 interface Suggestion {
   id: string;
-  kind: 'gene' | 'drug';
+  kind: 'gene' | 'drug' | 'disease';
   label: string;
   detail: string;
   ref: string;
@@ -40,6 +40,7 @@ export function SearchBox({ placeholder = 'Search a drug or gene…', autoFocus 
     setOpen(false);
     setQ('');
     if (s.kind === 'drug') navigate(`/drug/${encodeURIComponent(s.ref)}`);
+    else if (s.kind === 'disease') navigate(`/disease/${encodeURIComponent(s.ref)}`);
     else navigate(`/genes?q=${encodeURIComponent(s.ref)}`);
   }
 

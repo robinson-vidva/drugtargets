@@ -57,6 +57,8 @@ export interface Meta {
     drugTargetEdges: number;
     mechanisms: number;
     drugsWithSimilar: number;
+    diseases: number;
+    drugIndicationPairs: number;
   };
   coverage: {
     approvedDrugs: number;
@@ -82,6 +84,20 @@ export type IdfMap = Record<string, number>;
 export type DrugTargetsMap = Record<string, TargetRow[]>;
 export type SimilarMap = Record<string, SimilarRow[]>;
 export type Mechanisms = string[];
+
+export type DiseaseId = number;
+
+export interface Disease {
+  efo: string;
+  name: string;
+}
+
+// [diseaseId, maxPhase]
+export type IndicationRow = [DiseaseId, number];
+
+export type DiseasesMap = Record<string, Disease>;
+export type DrugIndicationsMap = Record<string, IndicationRow[]>;
+export type DiseaseDrugsMap = Record<string, DrugId[]>;
 
 export type Direction = 'activate' | 'inhibit' | 'ambiguous';
 

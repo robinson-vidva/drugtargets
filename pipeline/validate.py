@@ -6,7 +6,8 @@ import json
 from common import die, load_config, log, out_dir
 
 REQUIRED = ["drugs.json", "genes.json", "drug_targets.json", "gene_drugs.json",
-            "idf.json", "similar.json", "mechanisms.json", "meta.json"]
+            "idf.json", "similar.json", "mechanisms.json", "meta.json",
+            "diseases.json", "drug_indications.json", "disease_drugs.json"]
 
 
 def main() -> None:
@@ -79,6 +80,23 @@ def main() -> None:
             for gi in conc + disc:
                 if gi not in gene_ids:
                     die(f"similar[{d}] unknown shared gene {gi}")
+
+    # indications referential integrity
+    diseases, drug_ind, dis_drugs = (J["diseases.json"], J["drug_indications.json"],
+                                     J["disease_drugs.json"])
+    disease_ids = {int(k) for k in diseases}
+    for d, rows in drug_ind.items():
+        if int(d) not in drug_ids:
+            die(f"drug_indications references unknown drug {d}")
+        for dis, ph in rows:
+            if dis not in disease_ids:
+                die(f"drug_indications[{d}] references unknown disease {dis}")
+    for dis, ds in dis_drugs.items():
+        if int(dis) not in disease_ids:
+            die(f"disease_drugs references unknown disease {dis}")
+        for d in ds:
+            if d not in drug_ids:
+                die(f"disease_drugs[{dis}] references unknown drug {d}")
 
     # meta counts cross-check
     c = meta["counts"]

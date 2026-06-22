@@ -39,6 +39,18 @@ export function ScoreBar({ value }: { value: number }) {
   );
 }
 
+export function phaseLabel(p: number): string {
+  if (p >= 4) return 'Approved';
+  if (p <= 0) return '—';
+  return `Phase ${p}`;
+}
+
+export function PhaseTag({ phase }: { phase: number }) {
+  if (phase >= 4) return <span className="badge activate">Approved</span>;
+  if (phase <= 0) return <span className="tag">—</span>;
+  return <span className="tag">Phase {phase}</span>;
+}
+
 export function Loading({ label = 'Loading…' }: { label?: string }) {
   return <div className="state"><div className="spinner" /><div>{label}</div></div>;
 }

@@ -43,8 +43,8 @@ export default function HomePage() {
         <p className="meta-line" style={{ marginTop: 22 }}>
           Indexed <strong>{c.drugs.toLocaleString()}</strong> drugs ·{' '}
           <strong>{c.genes.toLocaleString()}</strong> gene targets ·{' '}
-          <strong>{c.drugTargetEdges.toLocaleString()}</strong> drug–target links · built{' '}
-          {meta?.buildDate}.
+          <strong>{c.drugTargetEdges.toLocaleString()}</strong> drug–target links ·{' '}
+          <strong>{c.diseases.toLocaleString()}</strong> diseases · built {meta?.buildDate}.
         </p>
       )}
     </div>

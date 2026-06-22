@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useData } from '../data/DataContext';
-import type { DrugTargetsMap, Mechanisms } from '../data/types';
+import type { DrugTargetsMap, Mechanisms, IndicationRow } from '../data/types';
 import { signToDirection } from '../data/types';
-import { Disclaimer, DirectionBadge, EmptyState, Loading } from '../components/common';
+import { Disclaimer, DirectionBadge, EmptyState, Loading, PhaseTag } from '../components/common';
 import { SimilarDrugs } from '../components/SimilarDrugs';
 
 export default function DrugPage() {
   const { chembl = '' } = useParams();
-  const { drugs, genes, meta, chemblToDrugId, loadDrugTargets, loadMechanisms } = useData();
+  const { drugs, genes, meta, diseases, chemblToDrugId,
+    loadDrugTargets, loadMechanisms, loadDrugIndications } = useData();
   const [targets, setTargets] = useState<DrugTargetsMap | null>(null);
   const [mechanisms, setMechanisms] = useState<Mechanisms | null>(null);
+  const [indications, setIndications] = useState<IndicationRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const drugId = chemblToDrugId?.get(chembl.toUpperCase());
@@ -22,6 +24,14 @@ export default function DrugPage() {
       .catch((e) => { if (!cancelled) setErr(String(e)); });
     return () => { cancelled = true; };
   }, [loadDrugTargets, loadMechanisms]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadDrugIndications()
+      .then((m) => { if (!cancelled && drugId !== undefined) setIndications(m[String(drugId)] ?? []); })
+      .catch(() => { /* indications are non-critical */ });
+    return () => { cancelled = true; };
+  }, [loadDrugIndications, drugId]);
 
   if (!drugs || !genes) return <Loading />;
   if (drugId === undefined) {
@@ -113,6 +123,32 @@ export default function DrugPage() {
             </table>
           </div>
         )}
+
+      {indications && indications.length > 0 && diseases && (
+        <>
+          <h2>Indications</h2>
+          <p className="muted" style={{ marginTop: -6 }}>
+            Diseases this drug is approved for or studied in (highest clinical stage shown).
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Disease</th><th>Highest stage</th></tr></thead>
+              <tbody>
+                {indications.map(([dis, phase]) => {
+                  const dz = diseases[String(dis)];
+                  if (!dz) return null;
+                  return (
+                    <tr key={dis}>
+                      <td><Link to={`/disease/${encodeURIComponent(dz.efo)}`}>{dz.name}</Link></td>
+                      <td><PhaseTag phase={phase} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       <SimilarDrugs drugId={drugId} />
     </div>

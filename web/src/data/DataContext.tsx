@@ -6,6 +6,7 @@ import MiniSearch from 'minisearch';
 import type {
   DrugsMap, GenesMap, GeneDrugsMap, IdfMap, Meta,
   DrugTargetsMap, SimilarMap, Mechanisms,
+  DiseasesMap, DrugIndicationsMap, DiseaseDrugsMap,
 } from './types';
 
 export const DATA_DIR = 'v2026Q2';
@@ -18,11 +19,11 @@ async function getJSON<T>(name: string): Promise<T> {
 }
 
 export interface SearchDoc {
-  id: string;          // 'g:<geneId>' or 'd:<drugId>'
-  kind: 'gene' | 'drug';
-  label: string;       // symbol or drug name
-  detail: string;      // gene name / chembl id
-  ref: string;         // symbol (gene) or chembl (drug) — for navigation
+  id: string;          // 'g:<geneId>', 'd:<drugId>' or 's:<diseaseId>'
+  kind: 'gene' | 'drug' | 'disease';
+  label: string;       // symbol / drug name / disease name
+  detail: string;      // gene name / chembl id / efo id
+  ref: string;         // symbol (gene) / chembl (drug) / efo (disease) — for navigation
   text: string;        // searchable text incl aliases/synonyms
 }
 
@@ -32,10 +33,12 @@ interface EagerData {
   genes: GenesMap;
   geneDrugs: GeneDrugsMap;
   idf: IdfMap;
+  diseases: DiseasesMap;
   search: MiniSearch<SearchDoc>;
   docs: Map<string, SearchDoc>;
   symbolToGeneId: Map<string, number>;   // upper symbol/alias -> geneId
   chemblToDrugId: Map<string, number>;
+  efoToDiseaseId: Map<string, number>;
 }
 
 interface DataContextValue extends Partial<EagerData> {
@@ -44,6 +47,8 @@ interface DataContextValue extends Partial<EagerData> {
   loadDrugTargets: () => Promise<DrugTargetsMap>;
   loadSimilar: () => Promise<SimilarMap>;
   loadMechanisms: () => Promise<Mechanisms>;
+  loadDrugIndications: () => Promise<DrugIndicationsMap>;
+  loadDiseaseDrugs: () => Promise<DiseaseDrugsMap>;
 }
 
 const Ctx = createContext<DataContextValue | null>(null);
@@ -56,23 +61,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const dtRef = useRef<Promise<DrugTargetsMap> | null>(null);
   const simRef = useRef<Promise<SimilarMap> | null>(null);
   const mechRef = useRef<Promise<Mechanisms> | null>(null);
+  const indRef = useRef<Promise<DrugIndicationsMap> | null>(null);
+  const ddRef = useRef<Promise<DiseaseDrugsMap> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [meta, drugs, genes, geneDrugs, idf] = await Promise.all([
+        const [meta, drugs, genes, geneDrugs, idf, diseases] = await Promise.all([
           getJSON<Meta>('meta.json'),
           getJSON<DrugsMap>('drugs.json'),
           getJSON<GenesMap>('genes.json'),
           getJSON<GeneDrugsMap>('gene_drugs.json'),
           getJSON<IdfMap>('idf.json'),
+          getJSON<DiseasesMap>('diseases.json'),
         ]);
         if (cancelled) return;
 
         const docs = new Map<string, SearchDoc>();
         const symbolToGeneId = new Map<string, number>();
         const chemblToDrugId = new Map<string, number>();
+        const efoToDiseaseId = new Map<string, number>();
 
         for (const [id, g] of Object.entries(genes)) {
           const gid = Number(id);
@@ -90,6 +99,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
             ref: d.chembl, text: [d.name, d.chembl, ...d.pharmClass].join(' '),
           });
         }
+        for (const [id, s] of Object.entries(diseases)) {
+          efoToDiseaseId.set(s.efo.toUpperCase(), Number(id));
+          docs.set('s:' + id, {
+            id: 's:' + id, kind: 'disease', label: s.name, detail: s.efo,
+            ref: s.efo, text: s.name,
+          });
+        }
 
         const search = new MiniSearch<SearchDoc>({
           fields: ['label', 'text'],
@@ -99,8 +115,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         search.addAll([...docs.values()]);
 
         setEager({
-          meta, drugs, genes, geneDrugs, idf,
-          search, docs, symbolToGeneId, chemblToDrugId,
+          meta, drugs, genes, geneDrugs, idf, diseases,
+          search, docs, symbolToGeneId, chemblToDrugId, efoToDiseaseId,
         });
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -124,6 +140,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     loadMechanisms: () => {
       if (!mechRef.current) mechRef.current = getJSON<Mechanisms>('mechanisms.json');
       return mechRef.current;
+    },
+    loadDrugIndications: () => {
+      if (!indRef.current) indRef.current = getJSON<DrugIndicationsMap>('drug_indications.json');
+      return indRef.current;
+    },
+    loadDiseaseDrugs: () => {
+      if (!ddRef.current) ddRef.current = getJSON<DiseaseDrugsMap>('disease_drugs.json');
+      return ddRef.current;
     },
   }), [eager, error]);
 

@@ -4,6 +4,7 @@ import { ErrorState, Loading } from './components/common';
 import HomePage from './pages/HomePage';
 import GeneQueryPage from './pages/GeneQueryPage';
 import DrugPage from './pages/DrugPage';
+import DiseasePage from './pages/DiseasePage';
 import MethodsPage from './pages/MethodsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -54,6 +55,7 @@ export default function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/genes" element={<GeneQueryPage />} />
               <Route path="/drug/:chembl" element={<DrugPage />} />
+              <Route path="/disease/:efo" element={<DiseasePage />} />
               <Route path="/methods" element={<MethodsPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>

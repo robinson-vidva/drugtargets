@@ -331,6 +331,39 @@ def main() -> None:
             "aliases": [a for a in aliases.get(ens, []) if a != sym.upper()],
         }
 
+    # ---- indications (clinical_indication + disease) ----
+    log("reading clinical_indication + disease")
+    ci_glob = str(ot_dir("clinical_indication") / "*.parquet")
+    ci_rows = con.execute(
+        f"SELECT drugId, diseaseId, maxClinicalStage FROM read_parquet('{ci_glob}') "
+        f"WHERE drugId IS NOT NULL AND diseaseId IS NOT NULL"
+    ).fetchall()
+    drug_dis: dict[int, dict] = defaultdict(dict)   # drugInt -> {efo: maxPhase}
+    dis_referenced: set = set()
+    for did_raw, dis, stage in ci_rows:
+        did = canon(did_raw)
+        if did not in drug_id:
+            continue
+        di, ph = drug_id[did], STAGE_TO_PHASE.get(stage or "UNKNOWN", 0)
+        if ph > drug_dis[di].get(dis, -1):
+            drug_dis[di][dis] = ph
+        dis_referenced.add(dis)
+
+    dz_glob = str(ot_dir("disease") / "*.parquet")
+    dz_name = {i: n for i, n in con.execute(
+        f"SELECT id, name FROM read_parquet('{dz_glob}')").fetchall() if i in dis_referenced}
+    disease_efos = sorted(dis_referenced)
+    disease_id = {e: i for i, e in enumerate(disease_efos)}
+    diseases_json = {disease_id[e]: {"efo": e, "name": dz_name.get(e, e)} for e in disease_efos}
+    drug_indications, disease_drugs = {}, defaultdict(set)
+    for di, dmap in drug_dis.items():
+        drug_indications[di] = sorted(([disease_id[e], ph] for e, ph in dmap.items()),
+                                      key=lambda r: (-r[1], r[0]))
+        for e in dmap:
+            disease_drugs[disease_id[e]].add(di)
+    log(f"{len(diseases_json)} diseases, "
+        f"{sum(len(v) for v in drug_indications.values())} drug-indication pairs")
+
     def write(name: str, obj) -> int:
         path = out / name
         path.write_text(json.dumps(obj, separators=(",", ":")))
@@ -344,6 +377,9 @@ def main() -> None:
     write("gene_drugs.json", {gi: sorted(ds) for gi, ds in sorted(gene_drugs.items())})
     write("idf.json", {gi: idf[gi] for gi in sorted(idf)})
     write("mechanisms.json", mech_list)
+    write("diseases.json", diseases_json)
+    write("drug_indications.json", {di: rows for di, rows in sorted(drug_indications.items())})
+    write("disease_drugs.json", {e: sorted(ds) for e, ds in sorted(disease_drugs.items())})
     sim_size = write("similar.json", similar)
 
     A = cov["approved"]
@@ -381,6 +417,8 @@ def main() -> None:
             "drugTargetEdges": sum(len(v) for v in drug_targets.values()),
             "mechanisms": len(mech_list),
             "drugsWithSimilar": len(similar),
+            "diseases": len(diseases_json),
+            "drugIndicationPairs": sum(len(v) for v in drug_indications.values()),
         },
         "coverage": coverage,
         "sources": sources_stat,
