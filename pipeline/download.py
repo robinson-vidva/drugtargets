@@ -19,8 +19,8 @@ import zipfile
 
 import requests
 
-from common import (CACHE, RAW, die, drugcentral_path, hgnc_path, load_config,
-                    log, openfda_dir, ot_dir, unichem_path)
+from common import (CACHE, RAW, die, drugcentral_path, hgnc_path, iuphar_dir,
+                    load_config, log, openfda_dir, ot_dir, unichem_path)
 
 TIMEOUT = 300
 PARQUET_RE = re.compile(r'href="([^"]+\.parquet)"')
@@ -134,6 +134,12 @@ def download_drugcentral(cfg: dict, force: bool) -> None:
     download_file(cfg["drugcentral"]["dump_url"], dest, force)
 
 
+def download_iuphar(cfg: dict, force: bool) -> None:
+    log("Guide to Pharmacology (IUPHAR) interactions + ligands")
+    download_file(cfg["iuphar"]["interactions_url"], iuphar_dir() / "interactions.csv", force)
+    download_file(cfg["iuphar"]["ligands_url"], iuphar_dir() / "ligands.csv", force)
+
+
 def main() -> None:
     force = "--force" in sys.argv
     cfg = load_config()
@@ -144,6 +150,7 @@ def main() -> None:
     download_openfda(cfg, force)
     download_unichem(cfg, force)
     download_drugcentral(cfg, force)
+    download_iuphar(cfg, force)
     log("download complete")
 
 

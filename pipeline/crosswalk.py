@@ -21,8 +21,9 @@ import glob
 import gzip
 import json
 
-from common import (CACHE, die, drugcentral_path, hgnc_path, load_config, log,
-                    openfda_dir, unichem_path)
+from common import (CACHE, die, drugcentral_path, hgnc_path, iuphar_dir,
+                    load_config, log, openfda_dir, unichem_path)
+from signmap import iuphar_action
 
 csv.field_size_limit(10_000_000)
 
@@ -269,6 +270,59 @@ def build_atc_from_drugcentral() -> dict[str, dict]:
     return out
 
 
+def _read_csv_skip_comments(path):
+    """Read a GtoPdb CSV, skipping the leading version-comment line; return (header, rows)."""
+    with open(path, newline="", encoding="utf-8", errors="replace") as fh:
+        rows = list(csv.reader(fh))
+    for i, r in enumerate(rows):
+        if any(c.strip() == "Ligand ID" for c in r):
+            return r, rows[i + 1:]
+    return rows[0], rows[1:]
+
+
+def build_iuphar() -> tuple[list, dict]:
+    """(edges, ligand_meta) from Guide to Pharmacology.
+
+    edges: [[ChEMBL id, Ensembl gene id, action label], ...] (human ENSG targets only).
+    ligand_meta: {ChEMBL id: {"name": str, "approved": bool}}.
+    """
+    idir = iuphar_dir()
+    ipath, lpath = idir / "interactions.csv", idir / "ligands.csv"
+    if not ipath.exists() or not lpath.exists():
+        die(f"IUPHAR CSVs missing in {idir} — run download first")
+
+    # ligand_id -> (chembl, name)
+    lhdr, lrows = _read_csv_skip_comments(lpath)
+    li = {h: k for k, h in enumerate(lhdr)}
+    lig: dict[str, tuple] = {}
+    for r in lrows:
+        if len(r) <= li["ChEMBL ID"]:
+            continue
+        chembl = r[li["ChEMBL ID"]].strip()
+        if chembl:
+            lig[r[li["Ligand ID"]].strip()] = (chembl, r[li["Name"]].strip())
+
+    ihdr, irows = _read_csv_skip_comments(ipath)
+    ii = {h: k for k, h in enumerate(ihdr)}
+    c_lid, c_ens = ii["Ligand ID"], ii["Target Ensembl Gene ID"]
+    c_type, c_act, c_appr = ii["Type"], ii["Action"], ii["Approved"]
+    edges, ligand_meta = [], {}
+    for r in irows:
+        if len(r) <= max(c_lid, c_ens, c_type, c_act, c_appr):
+            continue
+        ens = r[c_ens].strip()
+        lid = r[c_lid].strip()
+        if not ens.startswith("ENSG") or lid not in lig:
+            continue
+        chembl, name = lig[lid]
+        edges.append([chembl, ens, iuphar_action(r[c_type], r[c_act])])
+        meta = ligand_meta.setdefault(chembl, {"name": name, "approved": False})
+        if r[c_appr].strip().lower() in ("yes", "true", "t", "1"):
+            meta["approved"] = True
+    log(f"IUPHAR: {len(edges)} signed edges over {len(ligand_meta)} ChEMBL ligands")
+    return edges, ligand_meta
+
+
 def main() -> None:
     load_config()
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -279,6 +333,9 @@ def main() -> None:
     (CACHE / "unii_to_chembl.json").write_text(json.dumps(build_unii_to_chembl()))
     (CACHE / "approval_by_unii.json").write_text(json.dumps(build_approval_from_drugsfda()))
     (CACHE / "atc_by_chembl.json").write_text(json.dumps(build_atc_from_drugcentral()))
+    iuphar_edges, iuphar_ligands = build_iuphar()
+    (CACHE / "iuphar_edges.json").write_text(json.dumps(iuphar_edges))
+    (CACHE / "iuphar_ligands.json").write_text(json.dumps(iuphar_ligands))
     log("crosswalk complete")
 
 

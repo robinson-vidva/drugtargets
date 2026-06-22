@@ -44,6 +44,10 @@ def drugcentral_path() -> Path:
     return RAW / "drugcentral" / "drugcentral.sql.gz"
 
 
+def iuphar_dir() -> Path:
+    return RAW / "iuphar"
+
+
 def log(msg: str) -> None:
     print(f"[drugtargets] {msg}", flush=True)
 

@@ -49,6 +49,16 @@ export default function MethodsPage() {
         <em>{meta?.openfdaDisclaimer ?? 'openFDA is a beta research project and not for clinical use.'}</em>
       </div>
 
+      {/* ---- Drug-target graph ---- */}
+      <h2 id="graph">Drug–target graph</h2>
+      <p className="muted">
+        Drug–target edges come from two curated, direction-bearing sources, merged and
+        de-duplicated: <strong>Open Targets / ChEMBL</strong> mechanisms and{' '}
+        <strong>Guide to Pharmacology (IUPHAR/BPS)</strong>. Salt forms are collapsed to their
+        parent molecule, so each drug appears once. IUPHAR contributes targets and direction
+        (agonist/antagonist) for many ligands ChEMBL mechanisms don't annotate.
+      </p>
+
       {/* ---- Similarity ---- */}
       <h2 id="similarity">Similarity method</h2>
       <p>

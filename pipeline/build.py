@@ -81,7 +81,25 @@ def main() -> None:
     edges = load_edges(con, moa_glob)
     if not edges:
         die("no drug-target edges parsed from drug_mechanism_of_action")
-    log(f"{len(edges)} raw drug-target-action edges")
+    log(f"{len(edges)} raw drug-target-action edges (Open Targets / ChEMBL mechanisms)")
+
+    def _jload(name, default):
+        p = CACHE / name
+        return json.loads(p.read_text()) if p.exists() else default
+
+    # ---- merge IUPHAR signed edges (additive coverage) ----
+    iuphar_edges = _jload("iuphar_edges.json", [])
+    iuphar_ligands = _jload("iuphar_ligands.json", {})
+    for chembl, m in iuphar_ligands.items():
+        cid = canon(chembl)
+        if cid not in drug_meta:  # IUPHAR-only drug: take its name/approval
+            drug_meta[cid] = (m.get("name") or cid, "",
+                              "APPROVAL" if m.get("approved") else "UNKNOWN")
+            parent_of.setdefault(cid, cid)
+    log(f"{len(iuphar_edges)} IUPHAR signed edges merged")
+
+    ot_drugs = {canon(c) for c, _e, _a, _m in edges}
+    ot_genes = {e for _c, e, _a, _m in edges}
 
     # Aggregate to one primary action per (drug, gene); salt ChEMBL ids collapse to parent.
     by_pair_actions: dict[tuple, Counter] = defaultdict(Counter)
@@ -93,6 +111,8 @@ def main() -> None:
         by_pair_actions[key][at] += 1
         if mech:
             by_pair_mech[key].setdefault(at, mech)
+    for chembl, ensembl, action in iuphar_edges:
+        by_pair_actions[(canon(chembl), ensembl)][action] += 1
 
     # primary action = most frequent (tie -> alphabetical)
     pair_primary: dict[tuple, tuple] = {}  # (chembl,ensembl) -> (action, sign, mech)
@@ -107,8 +127,16 @@ def main() -> None:
     drug_id = {c: i for i, c in enumerate(drug_chembls)}
     gene_id = {e: i for i, e in enumerate(gene_ensembls)}
     N = len(drug_chembls)
-    log(f"{N} drugs ({len(raw_drugs) - N} salt forms collapsed to parents), "
-        f"{len(gene_ensembls)} distinct gene targets")
+    iuphar_drugs_added = len(set(drug_chembls) - ot_drugs)
+    iuphar_genes_added = len(set(gene_ensembls) - ot_genes)
+    sources_stat = {
+        "iupharDrugsAdded": iuphar_drugs_added,
+        "iupharGenesAdded": iuphar_genes_added,
+        "iupharEdges": len(iuphar_edges),
+    }
+    log(f"{N} drugs ({len(raw_drugs) - len(ot_drugs)} salts collapsed; "
+        f"+{iuphar_drugs_added} from IUPHAR), {len(gene_ensembls)} gene targets "
+        f"(+{iuphar_genes_added} from IUPHAR)")
 
     # ---- gene metadata (target) ----
     log("reading target")
@@ -355,6 +383,7 @@ def main() -> None:
             "drugsWithSimilar": len(similar),
         },
         "coverage": coverage,
+        "sources": sources_stat,
         "actionTypes": action_types,
         "signTable": sign_table(),
         "openfdaDisclaimer": cfg["openfda"]["disclaimer"],
@@ -369,6 +398,8 @@ def main() -> None:
             {"source": "UniChem", "version": "REST", "license": "EMBL-EBI"},
             {"source": "DrugCentral (WHO ATC)", "version": cfg["drugcentral"]["version"],
              "license": cfg["drugcentral"]["license"]},
+            {"source": "Guide to Pharmacology (IUPHAR/BPS)", "version": cfg["iuphar"]["version"],
+             "license": cfg["iuphar"]["license"]},
         ],
     }
     write("meta.json", meta)

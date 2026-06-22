@@ -77,6 +77,39 @@ def action_sign(action_type: str | None) -> int:
     return 0
 
 
+# IUPHAR/Guide to Pharmacology "Type" -> ChEMBL-style action label, so IUPHAR edges
+# share the same action vocabulary + sign map. "Allosteric modulator" and ambiguous
+# types are disambiguated by the interaction's "Action" column (Activation/Inhibition).
+_IUPHAR_DIRECT = {
+    "INHIBITOR": "INHIBITOR",
+    "AGONIST": "AGONIST",
+    "ANTAGONIST": "ANTAGONIST",
+    "ACTIVATOR": "ACTIVATOR",
+    "CHANNEL BLOCKER": "BLOCKER",
+    "GATING INHIBITOR": "INHIBITOR",
+}
+
+
+def iuphar_action(type_str: str | None, action_str: str | None) -> str:
+    """Map an IUPHAR interaction (Type, Action) to a ChEMBL-style action label."""
+    t = normalise(type_str)
+    a = normalise(action_str)
+    if t in _IUPHAR_DIRECT:
+        return _IUPHAR_DIRECT[t]
+    if t == "ALLOSTERIC MODULATOR":
+        if "ACTIV" in a:
+            return "POSITIVE ALLOSTERIC MODULATOR"
+        if "INHIB" in a:
+            return "NEGATIVE ALLOSTERIC MODULATOR"
+        return "MODULATOR"
+    # Antibody / None / Fusion protein / Subunit-specific: fall back to the Action column.
+    if "ACTIV" in a or a == "AGONIST":
+        return "ACTIVATOR"
+    if "INHIB" in a or a == "ANTAGONIST":
+        return "INHIBITOR"
+    return "OTHER"
+
+
 def sign_table() -> list[dict]:
     """Ordered, de-duplicated table for the Methods page."""
     rows: list[dict] = []
