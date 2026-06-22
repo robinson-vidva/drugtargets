@@ -9,14 +9,15 @@ from __future__ import annotations
 import datetime
 import json
 import math
-from collections import Counter, defaultdict
+from collections import defaultdict
 
 import duckdb
 
 from common import CACHE, die, load_config, log, ot_dir, out_dir
 from crosswalk import normalize_name
+from graph import build_pairs
 from similarity import top_similar
-from signmap import action_sign, sign_table
+from signmap import sign_table
 
 TOP_N = 30
 STAGE_TO_PHASE = {
@@ -100,27 +101,10 @@ def main() -> None:
 
     ot_drugs = {canon(c) for c, _e, _a, _m in edges}
     ot_genes = {e for _c, e, _a, _m in edges}
+    raw_drugs = {c for c, _e, _a, _m in edges}
 
-    # Aggregate to one primary action per (drug, gene); salt ChEMBL ids collapse to parent.
-    by_pair_actions: dict[tuple, Counter] = defaultdict(Counter)
-    by_pair_mech: dict[tuple, dict] = defaultdict(dict)
-    raw_drugs = set()
-    for chembl, ensembl, at, mech in edges:
-        raw_drugs.add(chembl)
-        key = (canon(chembl), ensembl)
-        by_pair_actions[key][at] += 1
-        if mech:
-            by_pair_mech[key].setdefault(at, mech)
-    for chembl, ensembl, action in iuphar_edges:
-        by_pair_actions[(canon(chembl), ensembl)][action] += 1
-
-    # primary action = most frequent (tie -> alphabetical)
-    pair_primary: dict[tuple, tuple] = {}  # (chembl,ensembl) -> (action, sign, mech)
-    for key, counter in by_pair_actions.items():
-        best = sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
-        mech = by_pair_mech[key].get(best) or next(
-            (m for m in by_pair_mech[key].values()), "")
-        pair_primary[key] = (best, action_sign(best), mech)
+    # Aggregate (salt collapse + IUPHAR merge) -> one primary action per (drug, gene).
+    pair_primary = build_pairs(edges, iuphar_edges, parent_of)
 
     drug_chembls = sorted({k[0] for k in pair_primary})
     gene_ensembls = sorted({k[1] for k in pair_primary})
