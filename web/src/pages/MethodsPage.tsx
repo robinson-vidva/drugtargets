@@ -122,12 +122,22 @@ export default function MethodsPage() {
           <Link to="/drug/CHEMBL941">imatinib</Link> → <code>L01EA01</code> "BCR-ABL tyrosine
           kinase inhibitors". The large SPL <code>drug/label</code> set is intentionally excluded
           (verified to add ~2% openFDA coverage for &gt;1 GB).
-          {cov && <> A class is present for <strong>{cov.anyClass.count.toLocaleString()} of{' '}
+          {cov && <> A <em>curated</em> class is present for{' '}
+            <strong>{cov.anyClass.count.toLocaleString()} of{' '}
             {cov.approvedDrugs.toLocaleString()} approved drugs ({cov.anyClass.pct}%)</strong>{' '}
             — ATC {cov.atc.pct}%, openFDA {cov.pharmClass.pct}% (of which{' '}
             {cov.pharmClass.byUnii.toLocaleString()} by UNII,{' '}
-            {cov.pharmClass.byNameFallback.toLocaleString()} by name). Among FDA-marketed drugs:{' '}
+            {cov.pharmClass.byNameFallback.toLocaleString()} by name); FDA-marketed{' '}
             <strong>{cov.fdaMarketed.pct}%</strong>.</>}</li>
+        <li><strong>Mechanism-derived class fallback.</strong> When no curated openFDA/ATC class
+          exists, a descriptor is derived from the drug's own most-specific targets and action
+          (e.g. "ADRB2 agonist") — so biologics, monoclonal antibodies and novel drugs still get
+          a label.{cov && <> With this fallback, <strong>{cov.withDerived.pct}% of approved
+          drugs</strong> carry a class.</>} (Curated taxonomies alone cannot reach 100% — many
+          investigational and non-US drugs are unclassified in openFDA and WHO ATC.)</li>
+        <li><strong>Salt forms collapsed.</strong> Salt/ester ChEMBL ids (e.g. imatinib mesylate)
+          are rolled into their parent molecule (imatinib) via the molecule hierarchy, so a drug
+          appears once.</li>
         <li><strong>Combination products excluded.</strong> Multi-ingredient records are skipped
           when attributing pharm_class, so a drug is not tagged with classes that belong to its
           combination partners.</li>

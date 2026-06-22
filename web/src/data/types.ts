@@ -15,6 +15,7 @@ export interface Drug {
   pharmClass: string[];   // openFDA EPC/MoA/PE
   atcClass: string[];     // WHO ATC level-4 labels (DrugCentral)
   atc: string[];          // ATC codes
+  derivedClass: string[]; // mechanism-derived (target + action), only when no curated class
 }
 
 export interface Gene {
@@ -60,6 +61,7 @@ export interface Meta {
   coverage: {
     approvedDrugs: number;
     anyClass: { count: number; pct: number };
+    withDerived: { count: number; pct: number };
     pharmClass: { count: number; pct: number; byUnii: number; byNameFallback: number; unmatched: number };
     atc: { count: number; pct: number };
     fdaMarketed: { drugs: number; withClass: number; pct: number };

@@ -58,6 +58,24 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect()
 
+    # ---- drug metadata + parent map (read drug_molecule first, so salts collapse) ----
+    log("reading drug_molecule")
+    dm_glob = str(ot_dir("drug_molecule") / "*.parquet")
+    drows = con.execute(
+        f"SELECT id, name, drugType, maximumClinicalStage, synonyms, parentId "
+        f"FROM read_parquet('{dm_glob}')"
+    ).fetchall()
+    parent_of: dict[str, str] = {}       # ChEMBL id -> top parent (salt -> parent)
+    drug_meta: dict[str, tuple] = {}     # id -> (name, drugType, stage), over ALL molecules
+    drug_syns: dict[str, list] = {}
+    for did, name, dtype, stage, syns, parent in drows:
+        parent_of[did] = parent or did
+        drug_meta[did] = (name or did, dtype or "", (stage or "UNKNOWN"))
+        drug_syns[did] = [s for s in (syns or []) if s]
+
+    def canon(c: str) -> str:
+        return parent_of.get(c, c)
+
     moa_glob = str(ot_dir("drug_mechanism_of_action") / "*.parquet")
     log("reading drug_mechanism_of_action")
     edges = load_edges(con, moa_glob)
@@ -65,11 +83,13 @@ def main() -> None:
         die("no drug-target edges parsed from drug_mechanism_of_action")
     log(f"{len(edges)} raw drug-target-action edges")
 
-    # Aggregate to one primary action per (drug, gene).
+    # Aggregate to one primary action per (drug, gene); salt ChEMBL ids collapse to parent.
     by_pair_actions: dict[tuple, Counter] = defaultdict(Counter)
     by_pair_mech: dict[tuple, dict] = defaultdict(dict)
+    raw_drugs = set()
     for chembl, ensembl, at, mech in edges:
-        key = (chembl, ensembl)
+        raw_drugs.add(chembl)
+        key = (canon(chembl), ensembl)
         by_pair_actions[key][at] += 1
         if mech:
             by_pair_mech[key].setdefault(at, mech)
@@ -87,7 +107,8 @@ def main() -> None:
     drug_id = {c: i for i, c in enumerate(drug_chembls)}
     gene_id = {e: i for i, e in enumerate(gene_ensembls)}
     N = len(drug_chembls)
-    log(f"{N} drugs with >=1 mechanism, {len(gene_ensembls)} distinct gene targets")
+    log(f"{N} drugs ({len(raw_drugs) - N} salt forms collapsed to parents), "
+        f"{len(gene_ensembls)} distinct gene targets")
 
     # ---- gene metadata (target) ----
     log("reading target")
@@ -109,23 +130,6 @@ def main() -> None:
 
     aliases = json.loads((CACHE / "gene_aliases.json").read_text()) if (
         CACHE / "gene_aliases.json").exists() else {}
-
-    # ---- drug metadata (drug_molecule) ----
-    log("reading drug_molecule")
-    dm_glob = str(ot_dir("drug_molecule") / "*.parquet")
-    drows = con.execute(
-        f"SELECT id, name, drugType, maximumClinicalStage, synonyms, parentId "
-        f"FROM read_parquet('{dm_glob}')"
-    ).fetchall()
-    drug_meta = {}
-    drug_syns = {}
-    parent_of: dict[str, str] = {}  # ChEMBL id -> top parent (salt -> parent); over ALL molecules
-    for did, name, dtype, stage, syns, parent in drows:
-        parent_of[did] = parent or did
-        if did not in drug_id:
-            continue
-        drug_meta[did] = (name or did, dtype or "", (stage or "UNKNOWN"))
-        drug_syns[did] = [s for s in (syns or []) if s]
 
     def _load(name):
         p = CACHE / name
@@ -229,9 +233,29 @@ def main() -> None:
     log("computing signed-cosine similarity")
     similar = top_similar(vectors, drug_targets, top_n=TOP_N, log=log)
 
+    # ---- mechanism-derived class fallback (every drug has >=1 target+action) ----
+    # Used only when no curated openFDA/ATC class exists, so biologics/mAbs/novel drugs
+    # still get a descriptor. Derived from the drug's own most-specific (highest-IDF) targets.
+    WORD = {1: "agonist", -1: "inhibitor", 0: "modulator"}
+    gi_symbol = {gi: gene_meta.get(ens, (ens,))[0] for ens, gi in gene_id.items()}
+
+    def derived_class(di: int) -> list[str]:
+        rows = drug_targets.get(di, [])
+        ranked = sorted(rows, key=lambda r: (-idf.get(r[0], 0.0), gi_symbol.get(r[0], "")))
+        out, seen = [], set()
+        for gi, _ac, sign, _m in ranked:
+            lbl = f"{gi_symbol.get(gi, str(gi))} {WORD[sign]}"
+            if lbl not in seen:
+                seen.add(lbl)
+                out.append(lbl)
+            if len(out) >= 3:
+                break
+        return out
+
     # ---- emit artifacts ----
     log("writing artifacts")
-    cov = {"approved": 0, "pharm": 0, "atc": 0, "any": 0, "fdaMkt": 0, "fdaWithClass": 0}
+    cov = {"approved": 0, "pharm": 0, "atc": 0, "any": 0, "anyOrDerived": 0,
+           "fdaMkt": 0, "fdaWithClass": 0}
     drugs_json = {}
     for did, di in drug_id.items():
         name, dtype, stage = drug_meta.get(did, (did, "", "UNKNOWN"))
@@ -239,6 +263,7 @@ def main() -> None:
         a = atc_by_chembl.get(did)
         atc_classes = sorted(a["classes"]) if a else []
         atc_codes = sorted(a["codes"]) if a else []
+        derived = derived_class(di) if not (classes or atc_classes) else []
         ot_approved = stage == "APPROVAL"
         fda = approval_by_chembl.get(did)
         approved = ot_approved or bool(fda)
@@ -250,6 +275,7 @@ def main() -> None:
             cov["pharm"] += bool(classes)
             cov["atc"] += bool(atc_classes)
             cov["any"] += has_class
+            cov["anyOrDerived"] += has_class or bool(derived)
         if fda:
             cov["fdaMkt"] += 1
             cov["fdaWithClass"] += has_class
@@ -263,6 +289,7 @@ def main() -> None:
             "pharmClass": classes,
             "atcClass": atc_classes,
             "atc": atc_codes,
+            "derivedClass": derived,
         }
 
     genes_json = {}
@@ -298,6 +325,7 @@ def main() -> None:
     coverage = {
         "approvedDrugs": A,
         "anyClass": {"count": cov["any"], "pct": _pct(cov["any"])},
+        "withDerived": {"count": cov["anyOrDerived"], "pct": _pct(cov["anyOrDerived"])},
         "pharmClass": {
             "count": cov["pharm"], "pct": _pct(cov["pharm"]),
             "byUnii": prov_approved["unii"], "byNameFallback": prov_approved["fallback"],
@@ -306,10 +334,10 @@ def main() -> None:
         "atc": {"count": cov["atc"], "pct": _pct(cov["atc"])},
         "fdaMarketed": {"drugs": cov["fdaMkt"], "withClass": cov["fdaWithClass"], "pct": fda_pct},
     }
-    log(f"coverage of approved drugs ({A}): any class {cov['any']} ({_pct(cov['any'])}%) "
-        f"| openFDA pharm {cov['pharm']} ({_pct(cov['pharm'])}%) | ATC {cov['atc']} ({_pct(cov['atc'])}%)")
-    log(f"  openFDA provenance (approved): {prov_approved}")
-    log(f"  FDA-marketed: {cov['fdaWithClass']}/{cov['fdaMkt']} ({fda_pct}%)")
+    log(f"coverage of approved drugs ({A}): curated class {cov['any']} ({_pct(cov['any'])}%) "
+        f"| incl. mechanism-derived {cov['anyOrDerived']} ({_pct(cov['anyOrDerived'])}%)")
+    log(f"  openFDA pharm {cov['pharm']} ({_pct(cov['pharm'])}%) | ATC {cov['atc']} ({_pct(cov['atc'])}%) "
+        f"| provenance(approved) {prov_approved} | FDA-marketed {fda_pct}%")
 
     meta = {
         "otRelease": cfg["opentargets"]["release"],

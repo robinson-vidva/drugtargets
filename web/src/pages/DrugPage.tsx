@@ -70,6 +70,16 @@ export default function DrugPage() {
         </div>
       )}
 
+      {drug.pharmClass.length === 0 && drug.atcClass.length === 0 && drug.derivedClass.length > 0 && (
+        <div className="chip-row" style={{ marginTop: 10 }}>
+          <span className="muted" style={{ fontSize: '0.8rem', alignSelf: 'center' }}
+            title="No curated openFDA/ATC class; derived from this drug's targets and action">
+            mechanism-derived:
+          </span>
+          {drug.derivedClass.map((p) => <span className="tag" key={p}>{p}</span>)}
+        </div>
+      )}
+
       <Disclaimer />
 
       <h2>Molecular targets</h2>
