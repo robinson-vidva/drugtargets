@@ -168,6 +168,22 @@ tbody tr:last-child td { border-bottom: none; }
 .scorebar .fill { height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
 .scorebar .val { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.85rem; min-width: 40px; text-align: right; }
 
+/* Sortable headers */
+.th-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+.th-sort:hover { color: var(--text); }
+.sort-ind { margin-left: 6px; font-size: 0.75em; opacity: 0.35; }
+.sort-ind.on { opacity: 1; color: var(--accent); }
+
+/* Loading skeleton shimmer */
+.skeleton { display: inline-block; height: 12px; border-radius: 6px; min-width: 40px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%; animation: shimmer 1.3s ease infinite; }
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+
+/* Per-page selector */
+.page-size { margin-left: 10px; padding: 2px 6px; font-size: 0.8rem; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface-2); color: var(--muted); cursor: pointer; }
+
 /* Pagination */
 .pager { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   flex-wrap: wrap; margin: 12px 0 4px; }
@@ -191,9 +207,9 @@ tbody tr:last-child td { border-bottom: none; }
 /* Disclaimer */
 .disclaimer {
   border: 1px solid var(--amber); background: var(--amber-bg);
-  color: #f3d27a; border-radius: var(--radius); padding: 10px 14px; font-size: 0.85rem; margin: 14px 0;
+  color: #6b4e10; border-radius: var(--radius); padding: 10px 14px; font-size: 0.85rem; margin: 14px 0;
 }
-.disclaimer strong { color: var(--amber); }
+.disclaimer strong { color: #8a5800; }
 
 /* States */
 .state { text-align: center; color: var(--muted); padding: 48px 20px; }

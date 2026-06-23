@@ -4,7 +4,7 @@ import { useData } from '../data/DataContext';
 import type { GeneId, SimilarMap } from '../data/types';
 import { usePaged } from '../lib/usePaged';
 import { Pagination } from './Pagination';
-import { ScoreBar, EmptyState, Loading } from './common';
+import { ScoreBar, EmptyState, TableSkeleton } from './common';
 
 function GeneChips({ ids, kind, genes }:
   { ids: GeneId[]; kind: 'concordant' | 'discordant'; genes: Record<string, { symbol: string }> }) {
@@ -83,7 +83,7 @@ export function SimilarDrugs({ drugId }: { drugId: number }) {
   }, [loadSimilar]);
 
   const entries = useMemo(() => similar?.[String(drugId)] ?? [], [similar, drugId]);
-  const paged = usePaged(entries, 15);
+  const paged = usePaged(entries, 10);
 
   return (
     <>
@@ -102,7 +102,7 @@ export function SimilarDrugs({ drugId }: { drugId: number }) {
       </p>
 
       {err ? <EmptyState>Failed to load similar drugs: {err}</EmptyState>
-        : !similar ? <Loading label="Loading similar drugs…" />
+        : !similar ? <TableSkeleton rows={5} cols={5} />
         : entries.length === 0 ? <EmptyState>No similar drugs (drug has no signed targets).</EmptyState>
         : (
           <>

@@ -4,8 +4,9 @@ import { useData } from '../data/DataContext';
 import type { DrugIndicationsMap } from '../data/types';
 import { downloadCSV } from '../lib/csv';
 import { usePaged } from '../lib/usePaged';
+import { useSortable } from '../lib/useSortable';
 import { Pagination } from '../components/Pagination';
-import { Disclaimer, EmptyState, Loading, PhaseTag, phaseLabel } from '../components/common';
+import { Disclaimer, EmptyState, Loading, PhaseTag, SortHeader, TableSkeleton, phaseLabel } from '../components/common';
 
 export default function DiseasePage() {
   const { efo = '' } = useParams();
@@ -35,7 +36,13 @@ export default function DiseasePage() {
       .sort((a, b) => (b.phase - a.phase)
         || drugs[String(a.id)].name.localeCompare(drugs[String(b.id)].name));
   }, [ind, drugs, diseaseId]);
-  const paged = usePaged(rows, 25);
+  const { sorted, sort, toggle } = useSortable(rows, {
+    name: (r) => (drugs?.[String(r.id)]?.name ?? '').toLowerCase(),
+    type: (r) => drugs?.[String(r.id)]?.drugType ?? '',
+    phase: (r) => r.phase,
+  }, { key: 'phase', dir: 'desc' });
+  const [pageSize, setPageSize] = useState(10);
+  const paged = usePaged(sorted, pageSize);
 
   if (!diseases || !drugs) return <Loading />;
   if (diseaseId === undefined) {
@@ -65,7 +72,7 @@ export default function DiseasePage() {
         )}
       </div>
       {err ? <EmptyState>Failed to load indications: {err}</EmptyState>
-        : !ind ? <Loading label="Loading indications…" />
+        : !ind ? <TableSkeleton rows={8} cols={4} />
         : rows.length === 0 ? <EmptyState>No drugs in the dataset for this disease.</EmptyState>
         : (
           <>
@@ -73,7 +80,12 @@ export default function DiseasePage() {
               {' '}(highest clinical stage reached for this indication).</p>
             <div className="table-wrap" id="disease-drugs">
               <table>
-                <thead><tr><th>Drug</th><th>Type</th><th>Stage (this indication)</th><th>Targets</th></tr></thead>
+                <thead><tr>
+                  <SortHeader label="Drug" sortKey="name" sort={sort} onSort={toggle} />
+                  <SortHeader label="Type" sortKey="type" sort={sort} onSort={toggle} />
+                  <SortHeader label="Stage (this indication)" sortKey="phase" sort={sort} onSort={toggle} />
+                  <th>Targets</th>
+                </tr></thead>
                 <tbody>
                   {paged.pageItems.map(({ id, phase }) => {
                     const d = drugs[String(id)];
@@ -89,7 +101,8 @@ export default function DiseasePage() {
                 </tbody>
               </table>
             </div>
-            <Pagination paged={paged} label="drugs" scrollTargetId="disease-drugs" />
+            <Pagination paged={paged} label="drugs" scrollTargetId="disease-drugs"
+              pageSize={pageSize} onPageSize={setPageSize} />
           </>
         )}
     </div>

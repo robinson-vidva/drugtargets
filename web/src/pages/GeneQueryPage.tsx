@@ -4,8 +4,9 @@ import { useData } from '../data/DataContext';
 import { booleanGeneQuery, type BoolOp } from '../lib/booleanQuery';
 import { downloadCSV } from '../lib/csv';
 import { usePaged } from '../lib/usePaged';
+import { useSortable } from '../lib/useSortable';
 import { Pagination } from '../components/Pagination';
-import { Disclaimer, EmptyState, phaseLabel } from '../components/common';
+import { Disclaimer, EmptyState, SortHeader, phaseLabel } from '../components/common';
 
 interface Token { geneId: number; symbol: string; }
 
@@ -97,7 +98,14 @@ export default function GeneQueryPage() {
     && drug.maxPhase >= minPhase
     && (!drugType || drug.drugType === drugType)
   ), [results, approvedOnly, minPhase, drugType]);
-  const paged = usePaged(filtered, 25);
+  const { sorted, sort, toggle } = useSortable(filtered, {
+    name: (r) => r.drug.name.toLowerCase(),
+    type: (r) => r.drug.drugType,
+    phase: (r) => r.drug.maxPhase,
+    status: (r) => (r.drug.approved ? 1 : 0),
+  }, { key: 'phase', dir: 'desc' });
+  const [pageSize, setPageSize] = useState(10);
+  const paged = usePaged(sorted, pageSize);
 
   function exportCsv() {
     downloadCSV(
@@ -198,7 +206,13 @@ export default function GeneQueryPage() {
             <div className="table-wrap" id="gene-results">
               <table>
                 <thead>
-                  <tr><th>Drug</th><th>Type</th><th>Max phase</th><th>Status</th><th>Class</th></tr>
+                  <tr>
+                    <SortHeader label="Drug" sortKey="name" sort={sort} onSort={toggle} />
+                    <SortHeader label="Type" sortKey="type" sort={sort} onSort={toggle} />
+                    <SortHeader label="Max phase" sortKey="phase" sort={sort} onSort={toggle} />
+                    <SortHeader label="Status" sortKey="status" sort={sort} onSort={toggle} />
+                    <th>Class</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {paged.pageItems.map(({ id, drug }) => (
@@ -215,7 +229,8 @@ export default function GeneQueryPage() {
               </table>
             </div>
           )}
-          <Pagination paged={paged} label="drugs" scrollTargetId="gene-results" />
+          <Pagination paged={paged} label="drugs" scrollTargetId="gene-results"
+            pageSize={pageSize} onPageSize={setPageSize} />
         </>
       )}
     </div>

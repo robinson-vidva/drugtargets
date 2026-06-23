@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Direction } from '../data/types';
+import type { SortState } from '../lib/useSortable';
 
 export function Disclaimer() {
   return (
@@ -53,6 +54,38 @@ export function PhaseTag({ phase }: { phase: number }) {
 
 export function Loading({ label = 'Loading…' }: { label?: string }) {
   return <div className="state"><div className="spinner" /><div>{label}</div></div>;
+}
+
+/** Shimmer placeholder for a table while its data lazy-loads. */
+export function TableSkeleton({ rows = 6, cols = 4 }: { rows?: number; cols?: number }) {
+  return (
+    <div className="table-wrap" aria-hidden="true">
+      <table>
+        <tbody>
+          {Array.from({ length: rows }).map((_, r) => (
+            <tr key={r}>
+              {Array.from({ length: cols }).map((__, c) => (
+                <td key={c}><span className="skeleton" style={{ width: `${60 - c * 8}%` }} /></td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Clickable, sort-aware table header cell. */
+export function SortHeader({ label, sortKey, sort, onSort }: {
+  label: string; sortKey: string; sort: SortState | null; onSort: (k: string) => void;
+}) {
+  const active = sort?.key === sortKey;
+  return (
+    <th className="th-sort" onClick={() => onSort(sortKey)}
+      aria-sort={active ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      {label}<span className={`sort-ind ${active ? 'on' : ''}`}>{active ? (sort!.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+    </th>
+  );
 }
 
 export function ErrorState({ message }: { message: string }) {

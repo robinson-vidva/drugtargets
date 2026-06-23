@@ -4,9 +4,15 @@ interface Props<T> {
   paged: Paged<T>;
   label?: string;          // e.g. "drugs", "hypotheses"
   scrollTargetId?: string; // element to scroll to top of on page change
+  pageSize?: number;       // when provided with onPageSize, renders a per-page selector
+  onPageSize?: (n: number) => void;
+  pageSizeOptions?: number[];
 }
 
-export function Pagination<T>({ paged, label = 'items', scrollTargetId }: Props<T>) {
+export function Pagination<T>({
+  paged, label = 'items', scrollTargetId,
+  pageSize, onPageSize, pageSizeOptions = [10, 25, 50, 100],
+}: Props<T>) {
   const { page, pageCount, from, to, total, setPage } = paged;
   if (total === 0) return null;
 
@@ -20,8 +26,16 @@ export function Pagination<T>({ paged, label = 'items', scrollTargetId }: Props<
 
   return (
     <div className="pager">
-      <span className="pager-info">{from.toLocaleString()}–{to.toLocaleString()} of{' '}
-        {total.toLocaleString()} {label}</span>
+      <span className="pager-info">
+        {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()} {label}
+        {pageSize !== undefined && onPageSize && (
+          <select className="page-size" value={pageSize}
+            aria-label="Results per page"
+            onChange={(e) => onPageSize(Number(e.target.value))}>
+            {pageSizeOptions.map((n) => <option key={n} value={n}>{n} / page</option>)}
+          </select>
+        )}
+      </span>
       {pageCount > 1 && (
         <div className="pager-btns" role="navigation" aria-label="Pagination">
           <button className="pager-btn" disabled={page === 0} onClick={() => go(page - 1)}

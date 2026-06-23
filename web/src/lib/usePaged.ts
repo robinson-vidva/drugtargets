@@ -14,9 +14,9 @@ export interface Paged<T> {
  * Client-side pagination over a (stable / memoized) array.
  * Resets to the first page whenever the input array reference changes.
  */
-export function usePaged<T>(items: T[], pageSize = 20): Paged<T> {
+export function usePaged<T>(items: T[], pageSize = 10): Paged<T> {
   const [page, setPage] = useState(0);
-  useEffect(() => { setPage(0); }, [items]);
+  useEffect(() => { setPage(0); }, [items, pageSize]);
 
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
   const safePage = Math.min(page, pageCount - 1);

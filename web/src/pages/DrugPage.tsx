@@ -4,8 +4,9 @@ import { useData } from '../data/DataContext';
 import type { DrugTargetsMap, Mechanisms, IndicationRow } from '../data/types';
 import { signToDirection } from '../data/types';
 import { usePaged } from '../lib/usePaged';
+import { useSortable } from '../lib/useSortable';
 import { Pagination } from '../components/Pagination';
-import { Disclaimer, DirectionBadge, EmptyState, Loading, PhaseTag } from '../components/common';
+import { Disclaimer, DirectionBadge, EmptyState, Loading, PhaseTag, SortHeader, TableSkeleton } from '../components/common';
 import { SimilarDrugs } from '../components/SimilarDrugs';
 import { RepurposingHypotheses, StructuralSimilar } from '../components/Repurposing';
 
@@ -36,14 +37,22 @@ export default function DrugPage() {
     return () => { cancelled = true; };
   }, [loadDrugIndications, drugId]);
 
-  const targetRows = useMemo(() => {
-    const r = (drugId !== undefined && targets) ? (targets[String(drugId)] ?? []) : [];
-    if (!genes) return r;
-    return [...r].sort((a, b) =>
-      genes[String(a[0])].symbol.localeCompare(genes[String(b[0])].symbol));
-  }, [targets, drugId, genes]);
-  const targetsPaged = usePaged(targetRows, 12);
-  const indPaged = usePaged(indications ?? [], 12);
+  const targetRows = useMemo(
+    () => ((drugId !== undefined && targets) ? (targets[String(drugId)] ?? []) : []),
+    [targets, drugId]);
+  const targetSort = useSortable(targetRows, {
+    gene: (r) => genes?.[String(r[0])]?.symbol ?? '',
+    action: (r) => meta?.actionTypes[r[1]] ?? '',
+    direction: (r) => r[2],
+  }, { key: 'gene', dir: 'asc' });
+  const targetsPaged = usePaged(targetSort.sorted, 10);
+
+  const indItems = useMemo(() => indications ?? [], [indications]);
+  const indSort = useSortable(indItems, {
+    disease: (r) => diseases?.[String(r[0])]?.name ?? '',
+    stage: (r) => r[1],
+  }, { key: 'stage', dir: 'desc' });
+  const indPaged = usePaged(indSort.sorted, 10);
 
   if (!drugs || !genes) return <Loading />;
   if (drugId === undefined) {
@@ -106,14 +115,19 @@ export default function DrugPage() {
 
       <h2>Molecular targets</h2>
       {err ? <EmptyState>Failed to load targets: {err}</EmptyState>
-        : !targets ? <Loading label="Loading targets…" />
+        : !targets ? <TableSkeleton rows={6} cols={4} />
         : rows.length === 0 ? <EmptyState>No annotated mechanisms for this drug.</EmptyState>
         : (
           <>
           <div className="table-wrap" id="targets-table">
             <table>
               <thead>
-                <tr><th>Gene</th><th>Action type</th><th>Direction</th><th>Mechanism</th></tr>
+                <tr>
+                  <SortHeader label="Gene" sortKey="gene" sort={targetSort.sort} onSort={targetSort.toggle} />
+                  <SortHeader label="Action type" sortKey="action" sort={targetSort.sort} onSort={targetSort.toggle} />
+                  <SortHeader label="Direction" sortKey="direction" sort={targetSort.sort} onSort={targetSort.toggle} />
+                  <th>Mechanism</th>
+                </tr>
               </thead>
               <tbody>
                 {targetsPaged.pageItems.map(([gid, ac, sign, mi]) => {
@@ -145,7 +159,10 @@ export default function DrugPage() {
           </p>
           <div className="table-wrap" id="indications-table">
             <table>
-              <thead><tr><th>Disease</th><th>Highest stage</th></tr></thead>
+              <thead><tr>
+                <SortHeader label="Disease" sortKey="disease" sort={indSort.sort} onSort={indSort.toggle} />
+                <SortHeader label="Highest stage" sortKey="stage" sort={indSort.sort} onSort={indSort.toggle} />
+              </tr></thead>
               <tbody>
                 {indPaged.pageItems.map(([dis, phase]) => {
                   const dz = diseases[String(dis)];

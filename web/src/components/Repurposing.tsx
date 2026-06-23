@@ -4,7 +4,7 @@ import { useData } from '../data/DataContext';
 import type { RepurposingRow, StructuralRow } from '../data/types';
 import { usePaged } from '../lib/usePaged';
 import { Pagination } from './Pagination';
-import { ScoreBar, EmptyState, Loading } from './common';
+import { ScoreBar, EmptyState, TableSkeleton } from './common';
 
 export function RepurposingHypotheses({ drugId }: { drugId: number }) {
   const { drugs, genes, diseases, loadRepurposing } = useData();
@@ -29,7 +29,7 @@ export function RepurposingHypotheses({ drugId }: { drugId: number }) {
         genetic support. <strong>Hypotheses only.</strong>
       </p>
       {err ? <EmptyState>Failed to load: {err}</EmptyState>
-        : !map ? <Loading label="Loading hypotheses…" />
+        : !map ? <TableSkeleton rows={5} cols={5} />
         : rows.length === 0 ? <EmptyState>No repurposing hypotheses for this drug.</EmptyState>
         : (
           <>
@@ -100,7 +100,7 @@ export function StructuralSimilar({ drugId }: { drugId: number }) {
       <p className="muted" style={{ marginTop: -6 }}>
         By ECFP4 fingerprint (Tanimoto) — a chemical-structure axis independent of targets.
       </p>
-      {!map ? <Loading label="Loading structures…" /> : (
+      {!map ? <TableSkeleton rows={4} cols={2} /> : (
         <>
         <div className="table-wrap" id="structural-table">
           <table>
