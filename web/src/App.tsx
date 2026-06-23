@@ -41,9 +41,11 @@ function Footer() {
     <footer className="site-footer">
       <div className="inner spread">
         <span>
-          <NavLink to="/methods">Data &amp; Licenses</NavLink> · Open Targets{' '}
-          {meta?.otRelease ?? ''} · openFDA {meta?.openfdaDate ?? ''} · ChEMBL{' '}
-          {meta?.chemblVersion ?? ''}
+          <NavLink to="/methods">Data &amp; Licenses</NavLink> ·{' '}
+          <a href="https://github.com/robinson-vidva/drugtargets" target="_blank" rel="noreferrer">
+            Source on GitHub ↗
+          </a> · Open Targets {meta?.otRelease ?? ''} · openFDA {meta?.openfdaDate ?? ''} ·
+          ChEMBL {meta?.chemblVersion ?? ''}
         </span>
         <span className="muted">Hypothesis, not evidence — not for clinical use.</span>
       </div>
