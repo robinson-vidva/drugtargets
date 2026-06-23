@@ -8,6 +8,7 @@ export interface Sortable<T> {
   sorted: T[];
   sort: SortState | null;
   toggle: (key: string) => void;
+  setSort: (s: SortState | null) => void;
 }
 
 /**
@@ -40,5 +41,5 @@ export function useSortable<T>(
       ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' }
       : { key, dir: 'asc' }));
 
-  return { sorted, sort, toggle };
+  return { sorted, sort, toggle, setSort };
 }

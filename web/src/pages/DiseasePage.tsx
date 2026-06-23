@@ -5,7 +5,9 @@ import type { DrugIndicationsMap } from '../data/types';
 import { downloadCSV } from '../lib/csv';
 import { usePaged } from '../lib/usePaged';
 import { useSortable } from '../lib/useSortable';
+import { usePageTitle } from '../lib/usePageTitle';
 import { Pagination } from '../components/Pagination';
+import { CopyButton } from '../components/CopyButton';
 import { Disclaimer, EmptyState, Loading, PhaseTag, SortHeader, TableSkeleton, phaseLabel } from '../components/common';
 
 export default function DiseasePage() {
@@ -43,6 +45,7 @@ export default function DiseasePage() {
   }, { key: 'phase', dir: 'desc' });
   const [pageSize, setPageSize] = useState(10);
   const paged = usePaged(sorted, pageSize);
+  usePageTitle(diseaseId !== undefined && diseases ? diseases[String(diseaseId)]?.name : undefined);
 
   if (!diseases || !drugs) return <Loading />;
   if (diseaseId === undefined) {
@@ -56,6 +59,7 @@ export default function DiseasePage() {
       <div className="meta-line">
         <a href={`https://www.ebi.ac.uk/ols4/search?q=${encodeURIComponent(disease.efo)}`}
            target="_blank" rel="noreferrer" className="mono">{disease.efo}</a>
+        <CopyButton text={disease.efo} label="EFO id" />
       </div>
       <Disclaimer />
 

@@ -53,7 +53,45 @@ a:hover { text-decoration: underline; }
 .brand-logo { height: 26px; width: 26px; object-fit: contain; display: block; }
 .brand-word { color: var(--text); }
 .brand-word span { color: var(--accent); }
+.header-search { flex: 1; max-width: 360px; margin-left: 8px; }
+.header-search .searchbox input { padding: 8px 12px; font-size: 0.9rem; }
 .nav { display: flex; gap: 16px; margin-left: auto; }
+@media (max-width: 760px) { .header-search { display: none; } }
+
+/* Skip link (a11y) */
+.skip-link { position: absolute; left: 8px; top: -48px; z-index: 100; background: var(--accent);
+  color: var(--on-accent); padding: 8px 14px; border-radius: 8px; transition: top 0.15s; }
+.skip-link:focus { top: 8px; text-decoration: none; }
+
+/* Quick-start chips (home) */
+.quickstart { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
+.quickstart .tag { cursor: pointer; }
+.quickstart .tag:hover { border-color: var(--accent); color: var(--text); text-decoration: none; }
+
+/* Copy button + external links */
+.copy-btn { margin-left: 6px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); border-radius: 6px; padding: 0 6px; font-size: 0.8rem; cursor: pointer; line-height: 1.6; }
+.copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ext-links { display: flex; gap: 14px; margin-top: 4px; font-size: 0.85rem; }
+
+/* Methods table of contents */
+.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 8px; }
+.toc a { font-size: 0.85rem; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 999px; padding: 4px 12px; }
+.toc a:hover { color: var(--text); border-color: var(--accent); text-decoration: none; }
+
+/* Anchor targets clear the sticky header */
+html { scroll-behavior: smooth; }
+h2[id] { scroll-margin-top: 76px; }
+
+/* Visible focus for keyboard users */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .skeleton { animation: none; }
+  .to-top { transition: none; }
+}
 .nav a { color: var(--muted); font-size: 0.95rem; }
 .nav a.active, .nav a:hover { color: var(--text); text-decoration: none; }
 

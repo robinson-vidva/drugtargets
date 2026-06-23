@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
 import { useData } from '../data/DataContext';
 import { Disclaimer } from '../components/common';
+import { usePageTitle } from '../lib/usePageTitle';
 
 export default function MethodsPage() {
   const { meta } = useData();
   const cov = meta?.coverage;
+  usePageTitle('Methods & data');
   const pos = meta?.signTable.filter((r) => r.sign === 1) ?? [];
   const neg = meta?.signTable.filter((r) => r.sign === -1) ?? [];
   const amb = meta?.signTable.filter((r) => r.sign === 0) ?? [];
@@ -17,6 +19,16 @@ export default function MethodsPage() {
         drugtargets is a static, client-side tool. All data is precomputed by an offline
         Python pipeline and served as JSON — no server-side computation, no tracking.
       </p>
+
+      <nav className="toc" aria-label="On this page">
+        <a href="#sources">Data sources</a>
+        <a href="#graph">Drug–target graph</a>
+        <a href="#similarity">Similarity</a>
+        <a href="#repurposing">Repurposing</a>
+        <a href="#structure">Structure</a>
+        <a href="#sign-table">Sign table</a>
+        <a href="#caveats">Caveats</a>
+      </nav>
 
       {/* ---- Data sources ---- */}
       <h2 id="sources">Data sources &amp; licenses</h2>

@@ -4,51 +4,73 @@ import { useData } from '../data/DataContext';
 import { booleanGeneQuery, type BoolOp } from '../lib/booleanQuery';
 import { downloadCSV } from '../lib/csv';
 import { usePaged } from '../lib/usePaged';
-import { useSortable } from '../lib/useSortable';
+import { useSortable, type SortState } from '../lib/useSortable';
+import { usePersistentNumber } from '../lib/useLocalStorage';
+import { usePageTitle } from '../lib/usePageTitle';
 import { Pagination } from '../components/Pagination';
 import { Disclaimer, EmptyState, SortHeader, phaseLabel } from '../components/common';
 
 interface Token { geneId: number; symbol: string; }
 
+const DEFAULT_SORT: SortState = { key: 'phase', dir: 'desc' };
+const canon = (pairs: [string, string][]) =>
+  pairs.slice().sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]))
+    .map(([k, v]) => `${k}=${v}`).join('&');
+
+interface QueryState {
+  tokens: Token[]; op: BoolOp; approvedOnly: boolean; minPhase: number;
+  drugType: string; sort: SortState;
+}
+
+function parseQuery(
+  params: URLSearchParams,
+  genes: Record<string, { symbol: string }> | undefined,
+  symbolToGeneId: Map<string, number> | undefined,
+): QueryState {
+  const q = params.get('q') ?? '';
+  const tokens: Token[] = [];
+  for (const p of q.split(/\b(?:AND|OR)\b/i).map((s) => s.trim()).filter(Boolean)) {
+    const gid = symbolToGeneId?.get(p.toUpperCase());
+    if (gid !== undefined && genes && !tokens.some((t) => t.geneId === gid)) {
+      tokens.push({ geneId: gid, symbol: genes[String(gid)].symbol });
+    }
+  }
+  const sp = params.get('sort');
+  return {
+    tokens,
+    op: /\bOR\b/i.test(q) ? 'OR' : 'AND',
+    approvedOnly: params.get('approved') === '1',
+    minPhase: Number(params.get('phase')) || 0,
+    drugType: params.get('type') ?? '',
+    sort: sp ? { key: sp.split(':')[0], dir: sp.split(':')[1] === 'asc' ? 'asc' : 'desc' } : DEFAULT_SORT,
+  };
+}
+
+function buildParamObj(s: QueryState): Record<string, string> {
+  const obj: Record<string, string> = {};
+  if (s.tokens.length) obj.q = s.tokens.map((t) => t.symbol).join(` ${s.op} `);
+  if (s.approvedOnly) obj.approved = '1';
+  if (s.minPhase) obj.phase = String(s.minPhase);
+  if (s.drugType) obj.type = s.drugType;
+  if (s.sort.key !== DEFAULT_SORT.key || s.sort.dir !== DEFAULT_SORT.dir) {
+    obj.sort = `${s.sort.key}:${s.sort.dir}`;
+  }
+  return obj;
+}
+
 export default function GeneQueryPage() {
   const { genes, geneDrugs, drugs, symbolToGeneId, search } = useData();
   const [params, setParams] = useSearchParams();
-  const [tokens, setTokens] = useState<Token[]>([]);
-  const [op, setOp] = useState<BoolOp>('AND');
+  // Initialize from the URL synchronously so the first render already matches the link
+  // (avoids any mount-time clobber). genes/symbolToGeneId are eager-loaded before this renders.
+  const [init] = useState(() => parseQuery(params, genes, symbolToGeneId));
+  const [tokens, setTokens] = useState<Token[]>(init.tokens);
+  const [op, setOp] = useState<BoolOp>(init.op);
   const [text, setText] = useState('');
   const [active, setActive] = useState(0);
-  const [approvedOnly, setApprovedOnly] = useState(false);
-  const [minPhase, setMinPhase] = useState(0);
-  const [drugType, setDrugType] = useState('');
-  const lastQRef = useRef<string | null>(null);
-
-  // URL -> tokens. Re-parses on EXTERNAL url changes (shared link, in-app gene-link or
-  // search-box navigation), but skips echoes of our own tokens->URL writes (lastQRef).
-  useEffect(() => {
-    if (!genes || !symbolToGeneId) return;
-    const q = params.get('q') ?? '';
-    if (q === lastQRef.current) return;
-    lastQRef.current = q;
-    const detectedOp: BoolOp = /\bOR\b/i.test(q) ? 'OR' : 'AND';
-    const parts = q.split(/\b(?:AND|OR)\b/i).map((s) => s.trim()).filter(Boolean);
-    const resolved: Token[] = [];
-    for (const p of parts) {
-      const gid = symbolToGeneId.get(p.toUpperCase());
-      if (gid !== undefined && !resolved.some((t) => t.geneId === gid)) {
-        resolved.push({ geneId: gid, symbol: genes[String(gid)].symbol });
-      }
-    }
-    setOp(detectedOp);
-    setTokens(resolved);
-  }, [params, genes, symbolToGeneId]);
-
-  // tokens/op -> URL (shareable). lastQRef marks our write so the effect above ignores it.
-  useEffect(() => {
-    const q = tokens.length ? tokens.map((t) => t.symbol).join(` ${op} `) : '';
-    if (q === (params.get('q') ?? '')) return;
-    lastQRef.current = q;
-    setParams(q ? { q } : {}, { replace: true });
-  }, [tokens, op]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [approvedOnly, setApprovedOnly] = useState(init.approvedOnly);
+  const [minPhase, setMinPhase] = useState(init.minPhase);
+  const [drugType, setDrugType] = useState(init.drugType);
 
   const suggestions = useMemo(() => {
     if (!search || text.trim().length < 1) return [];
@@ -98,14 +120,44 @@ export default function GeneQueryPage() {
     && drug.maxPhase >= minPhase
     && (!drugType || drug.drugType === drugType)
   ), [results, approvedOnly, minPhase, drugType]);
-  const { sorted, sort, toggle } = useSortable(filtered, {
+  const { sorted, sort, toggle, setSort } = useSortable(filtered, {
     name: (r) => r.drug.name.toLowerCase(),
     type: (r) => r.drug.drugType,
     phase: (r) => r.drug.maxPhase,
     status: (r) => (r.drug.approved ? 1 : 0),
-  }, { key: 'phase', dir: 'desc' });
-  const [pageSize, setPageSize] = useState(10);
+  }, init.sort);
+  const [pageSize, setPageSize] = usePersistentNumber('dt.pageSize', 10);
   const paged = usePaged(sorted, pageSize);
+  usePageTitle(tokens.length
+    ? `${tokens.map((t) => t.symbol).join(` ${op} `)} — drugs`
+    : 'Gene query');
+
+  // ---- shareable URL state: genes, op, filters, sort (page size is local only) ----
+  // `syncedRef` holds the canon query string we last reconciled, so the two effects
+  // don't fight. We compare against the ACTUAL current params (not a stale ref), which
+  // is idempotent and StrictMode-safe — the first write is a no-op since state was
+  // initialized from the URL.
+  const syncedRef = useRef<string | null>(null);
+
+  // state -> URL
+  useEffect(() => {
+    const obj = buildParamObj({ tokens, op, approvedOnly, minPhase, drugType, sort: sort ?? DEFAULT_SORT });
+    const desired = canon(Object.entries(obj));
+    if (desired === canon([...params.entries()])) { syncedRef.current = desired; return; }
+    syncedRef.current = desired;
+    setParams(obj, { replace: true });
+  }, [tokens, op, approvedOnly, minPhase, drugType, sort]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // URL -> state (external nav: shared link, gene-link or search-box navigation)
+  useEffect(() => {
+    if (!genes || !symbolToGeneId) return;
+    const cur = canon([...params.entries()]);
+    if (cur === syncedRef.current) return;
+    syncedRef.current = cur;
+    const p = parseQuery(params, genes, symbolToGeneId);
+    setTokens(p.tokens); setOp(p.op); setApprovedOnly(p.approvedOnly);
+    setMinPhase(p.minPhase); setDrugType(p.drugType); setSort(p.sort);
+  }, [params, genes, symbolToGeneId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function exportCsv() {
     downloadCSV(

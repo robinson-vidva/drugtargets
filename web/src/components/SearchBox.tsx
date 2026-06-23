@@ -10,8 +10,8 @@ interface Suggestion {
   ref: string;
 }
 
-export function SearchBox({ placeholder = 'Search a drug or gene…', autoFocus = false }:
-  { placeholder?: string; autoFocus?: boolean }) {
+export function SearchBox({ placeholder = 'Search a drug or gene…', autoFocus = false, inputId }:
+  { placeholder?: string; autoFocus?: boolean; inputId?: string }) {
   const { search } = useData();
   const navigate = useNavigate();
   const [q, setQ] = useState('');
@@ -45,17 +45,23 @@ export function SearchBox({ placeholder = 'Search a drug or gene…', autoFocus 
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') {
+      setOpen(false);
+      if (q) setQ('');
+      else (e.target as HTMLInputElement).blur();
+      return;
+    }
     if (!open || results.length === 0) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => (a + 1) % results.length); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => (a - 1 + results.length) % results.length); }
     else if (e.key === 'Enter') { e.preventDefault(); go(results[active]); }
-    else if (e.key === 'Escape') setOpen(false);
   }
 
   return (
     <div className="searchbox" ref={boxRef}>
       <input
         type="text"
+        id={inputId}
         value={q}
         placeholder={placeholder}
         autoFocus={autoFocus}

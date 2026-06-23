@@ -5,7 +5,9 @@ import type { DrugTargetsMap, Mechanisms, IndicationRow } from '../data/types';
 import { signToDirection } from '../data/types';
 import { usePaged } from '../lib/usePaged';
 import { useSortable } from '../lib/useSortable';
+import { usePageTitle } from '../lib/usePageTitle';
 import { Pagination } from '../components/Pagination';
+import { CopyButton } from '../components/CopyButton';
 import { Disclaimer, DirectionBadge, EmptyState, Loading, PhaseTag, SortHeader, TableSkeleton } from '../components/common';
 import { SimilarDrugs } from '../components/SimilarDrugs';
 import { RepurposingHypotheses, StructuralSimilar } from '../components/Repurposing';
@@ -53,6 +55,7 @@ export default function DrugPage() {
     stage: (r) => r[1],
   }, { key: 'stage', dir: 'desc' });
   const indPaged = usePaged(indSort.sorted, 10);
+  usePageTitle(drugId !== undefined && drugs ? drugs[String(drugId)]?.name : undefined);
 
   if (!drugs || !genes) return <Loading />;
   if (drugId === undefined) {
@@ -71,8 +74,15 @@ export default function DrugPage() {
           <div className="meta-line">
             <a href={`https://www.ebi.ac.uk/chembl/explore/compound/${drug.chembl}`}
                target="_blank" rel="noreferrer" className="mono">{drug.chembl}</a>
+            <CopyButton text={drug.chembl} label="ChEMBL id" />
             {drug.drugType && <> · {drug.drugType}</>}
             {drug.maxPhase ? <> · max phase {drug.maxPhase}</> : null}
+          </div>
+          <div className="meta-line ext-links">
+            <a href={`https://pubchem.ncbi.nlm.nih.gov/#query=${encodeURIComponent(drug.name)}`}
+               target="_blank" rel="noreferrer">PubChem ↗</a>
+            <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(drug.name)}`}
+               target="_blank" rel="noreferrer">Wikipedia ↗</a>
           </div>
         </div>
         <div className="chip-row">

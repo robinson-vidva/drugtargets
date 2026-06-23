@@ -2,10 +2,12 @@ import { Link } from 'react-router-dom';
 import { useData } from '../data/DataContext';
 import { SearchBox } from '../components/SearchBox';
 import { Disclaimer } from '../components/common';
+import { usePageTitle } from '../lib/usePageTitle';
 
 export default function HomePage() {
   const { meta } = useData();
   const c = meta?.counts;
+  usePageTitle('Drug-target & repurposing explorer');
   return (
     <div>
       <h1>Explore drug targets &amp; repurposing hypotheses</h1>
@@ -15,8 +17,17 @@ export default function HomePage() {
         signed IDF-weighted target overlap.
       </p>
 
-      <div style={{ margin: '22px 0' }}>
+      <div style={{ margin: '22px 0 12px' }}>
         <SearchBox autoFocus placeholder="Search a drug (e.g. imatinib) or gene (e.g. EGFR)…" />
+      </div>
+
+      <div className="quickstart">
+        <span className="muted">Try:</span>
+        <Link className="tag" to="/drug/CHEMBL941">imatinib</Link>
+        <Link className="tag" to="/genes?q=EGFR">EGFR</Link>
+        <Link className="tag" to="/genes?q=EGFR%20AND%20ERBB2">EGFR AND ERBB2</Link>
+        <Link className="tag" to="/disease/EFO_0000339">chronic myeloid leukemia</Link>
+        <Link className="tag" to="/drug/CHEMBL25">aspirin</Link>
       </div>
 
       <Disclaimer />
