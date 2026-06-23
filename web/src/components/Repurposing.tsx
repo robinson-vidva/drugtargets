@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../data/DataContext';
 import type { RepurposingRow, StructuralRow } from '../data/types';
+import { usePaged } from '../lib/usePaged';
+import { Pagination } from './Pagination';
 import { ScoreBar, EmptyState, Loading } from './common';
 
 export function RepurposingHypotheses({ drugId }: { drugId: number }) {
@@ -15,7 +17,8 @@ export function RepurposingHypotheses({ drugId }: { drugId: number }) {
     return () => { c = true; };
   }, [loadRepurposing]);
 
-  const rows = map?.[String(drugId)] ?? [];
+  const rows = useMemo(() => map?.[String(drugId)] ?? [], [map, drugId]);
+  const paged = usePaged(rows, 10);
 
   return (
     <>
@@ -29,14 +32,15 @@ export function RepurposingHypotheses({ drugId }: { drugId: number }) {
         : !map ? <Loading label="Loading hypotheses…" />
         : rows.length === 0 ? <EmptyState>No repurposing hypotheses for this drug.</EmptyState>
         : (
-          <div className="table-wrap">
+          <>
+          <div className="table-wrap" id="repurposing-table">
             <table>
               <thead>
                 <tr><th>Candidate disease</th><th>Strength</th><th>Shared targets</th>
                   <th>Genetic support</th><th>Via</th></tr>
               </thead>
               <tbody>
-                {rows.map(([dz, score, via, shared, support]) => {
+                {paged.pageItems.map(([dz, score, via, shared, support]) => {
                   const d = diseases?.[String(dz)];
                   if (!d) return null;
                   const norm = Math.min(1, score / 2);
@@ -69,6 +73,8 @@ export function RepurposingHypotheses({ drugId }: { drugId: number }) {
               </tbody>
             </table>
           </div>
+          <Pagination paged={paged} label="hypotheses" scrollTargetId="repurposing-table" />
+          </>
         )}
     </>
   );
@@ -84,7 +90,8 @@ export function StructuralSimilar({ drugId }: { drugId: number }) {
     return () => { c = true; };
   }, [loadStructural]);
 
-  const rows = map?.[String(drugId)] ?? [];
+  const rows = useMemo(() => map?.[String(drugId)] ?? [], [map, drugId]);
+  const paged = usePaged(rows, 10);
   if (map && rows.length === 0) return null; // no SMILES / no structural neighbours
 
   return (
@@ -94,11 +101,12 @@ export function StructuralSimilar({ drugId }: { drugId: number }) {
         By ECFP4 fingerprint (Tanimoto) — a chemical-structure axis independent of targets.
       </p>
       {!map ? <Loading label="Loading structures…" /> : (
-        <div className="table-wrap">
+        <>
+        <div className="table-wrap" id="structural-table">
           <table>
             <thead><tr><th>Drug</th><th>Tanimoto</th></tr></thead>
             <tbody>
-              {rows.map(([other, t]) => {
+              {paged.pageItems.map(([other, t]) => {
                 const d = drugs?.[String(other)];
                 if (!d) return null;
                 return (
@@ -111,6 +119,8 @@ export function StructuralSimilar({ drugId }: { drugId: number }) {
             </tbody>
           </table>
         </div>
+        <Pagination paged={paged} label="similar structures" scrollTargetId="structural-table" />
+        </>
       )}
     </>
   );

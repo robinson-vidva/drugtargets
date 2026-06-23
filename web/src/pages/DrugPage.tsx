@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useData } from '../data/DataContext';
 import type { DrugTargetsMap, Mechanisms, IndicationRow } from '../data/types';
 import { signToDirection } from '../data/types';
+import { usePaged } from '../lib/usePaged';
+import { Pagination } from '../components/Pagination';
 import { Disclaimer, DirectionBadge, EmptyState, Loading, PhaseTag } from '../components/common';
 import { SimilarDrugs } from '../components/SimilarDrugs';
 import { RepurposingHypotheses, StructuralSimilar } from '../components/Repurposing';
@@ -33,6 +35,15 @@ export default function DrugPage() {
       .catch(() => { /* indications are non-critical */ });
     return () => { cancelled = true; };
   }, [loadDrugIndications, drugId]);
+
+  const targetRows = useMemo(() => {
+    const r = (drugId !== undefined && targets) ? (targets[String(drugId)] ?? []) : [];
+    if (!genes) return r;
+    return [...r].sort((a, b) =>
+      genes[String(a[0])].symbol.localeCompare(genes[String(b[0])].symbol));
+  }, [targets, drugId, genes]);
+  const targetsPaged = usePaged(targetRows, 12);
+  const indPaged = usePaged(indications ?? [], 12);
 
   if (!drugs || !genes) return <Loading />;
   if (drugId === undefined) {
@@ -98,15 +109,14 @@ export default function DrugPage() {
         : !targets ? <Loading label="Loading targets…" />
         : rows.length === 0 ? <EmptyState>No annotated mechanisms for this drug.</EmptyState>
         : (
-          <div className="table-wrap">
+          <>
+          <div className="table-wrap" id="targets-table">
             <table>
               <thead>
                 <tr><th>Gene</th><th>Action type</th><th>Direction</th><th>Mechanism</th></tr>
               </thead>
               <tbody>
-                {[...rows]
-                  .sort((a, b) => genes[String(a[0])].symbol.localeCompare(genes[String(b[0])].symbol))
-                  .map(([gid, ac, sign, mi]) => {
+                {targetsPaged.pageItems.map(([gid, ac, sign, mi]) => {
                     const g = genes[String(gid)];
                     return (
                       <tr key={gid}>
@@ -123,6 +133,8 @@ export default function DrugPage() {
               </tbody>
             </table>
           </div>
+          <Pagination paged={targetsPaged} label="targets" scrollTargetId="targets-table" />
+          </>
         )}
 
       {indications && indications.length > 0 && diseases && (
@@ -131,11 +143,11 @@ export default function DrugPage() {
           <p className="muted" style={{ marginTop: -6 }}>
             Diseases this drug is approved for or studied in (highest clinical stage shown).
           </p>
-          <div className="table-wrap">
+          <div className="table-wrap" id="indications-table">
             <table>
               <thead><tr><th>Disease</th><th>Highest stage</th></tr></thead>
               <tbody>
-                {indications.map(([dis, phase]) => {
+                {indPaged.pageItems.map(([dis, phase]) => {
                   const dz = diseases[String(dis)];
                   if (!dz) return null;
                   return (
@@ -148,6 +160,7 @@ export default function DrugPage() {
               </tbody>
             </table>
           </div>
+          <Pagination paged={indPaged} label="indications" scrollTargetId="indications-table" />
         </>
       )}
 

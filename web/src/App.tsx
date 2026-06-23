@@ -2,6 +2,7 @@ import { NavLink, Route, Routes } from 'react-router-dom';
 import { useData } from './data/DataContext';
 import { ErrorState, Loading } from './components/common';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { BackToTop } from './components/BackToTop';
 import HomePage from './pages/HomePage';
 import GeneQueryPage from './pages/GeneQueryPage';
 import DrugPage from './pages/DrugPage';
@@ -68,6 +69,7 @@ export default function App() {
           )}
         </div>
       </main>
+      <BackToTop />
       <Footer />
     </div>
   );

@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useData } from '../data/DataContext';
 import { booleanGeneQuery, type BoolOp } from '../lib/booleanQuery';
 import { downloadCSV } from '../lib/csv';
+import { usePaged } from '../lib/usePaged';
+import { Pagination } from '../components/Pagination';
 import { Disclaimer, EmptyState, phaseLabel } from '../components/common';
 
 interface Token { geneId: number; symbol: string; }
@@ -95,6 +97,7 @@ export default function GeneQueryPage() {
     && drug.maxPhase >= minPhase
     && (!drugType || drug.drugType === drugType)
   ), [results, approvedOnly, minPhase, drugType]);
+  const paged = usePaged(filtered, 25);
 
   function exportCsv() {
     downloadCSV(
@@ -192,13 +195,13 @@ export default function GeneQueryPage() {
           {filtered.length === 0 ? (
             <EmptyState>No drugs match {results.length === 0 ? 'this combination' : 'these filters'}.</EmptyState>
           ) : (
-            <div className="table-wrap">
+            <div className="table-wrap" id="gene-results">
               <table>
                 <thead>
                   <tr><th>Drug</th><th>Type</th><th>Max phase</th><th>Status</th><th>Class</th></tr>
                 </thead>
                 <tbody>
-                  {filtered.map(({ id, drug }) => (
+                  {paged.pageItems.map(({ id, drug }) => (
                     <tr key={id}>
                       <td><Link to={`/drug/${encodeURIComponent(drug.chembl)}`}>{drug.name}</Link>
                         <div className="muted mono" style={{ fontSize: '0.8rem' }}>{drug.chembl}</div></td>
@@ -212,6 +215,7 @@ export default function GeneQueryPage() {
               </table>
             </div>
           )}
+          <Pagination paged={paged} label="drugs" scrollTargetId="gene-results" />
         </>
       )}
     </div>

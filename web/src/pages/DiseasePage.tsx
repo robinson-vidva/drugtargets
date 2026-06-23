@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { useData } from '../data/DataContext';
 import type { DrugIndicationsMap } from '../data/types';
 import { downloadCSV } from '../lib/csv';
+import { usePaged } from '../lib/usePaged';
+import { Pagination } from '../components/Pagination';
 import { Disclaimer, EmptyState, Loading, PhaseTag, phaseLabel } from '../components/common';
 
 export default function DiseasePage() {
@@ -33,6 +35,7 @@ export default function DiseasePage() {
       .sort((a, b) => (b.phase - a.phase)
         || drugs[String(a.id)].name.localeCompare(drugs[String(b.id)].name));
   }, [ind, drugs, diseaseId]);
+  const paged = usePaged(rows, 25);
 
   if (!diseases || !drugs) return <Loading />;
   if (diseaseId === undefined) {
@@ -68,11 +71,11 @@ export default function DiseasePage() {
           <>
             <p className="muted">{rows.length.toLocaleString()} drug{rows.length === 1 ? '' : 's'}
               {' '}(highest clinical stage reached for this indication).</p>
-            <div className="table-wrap">
+            <div className="table-wrap" id="disease-drugs">
               <table>
                 <thead><tr><th>Drug</th><th>Type</th><th>Stage (this indication)</th><th>Targets</th></tr></thead>
                 <tbody>
-                  {rows.map(({ id, phase }) => {
+                  {paged.pageItems.map(({ id, phase }) => {
                     const d = drugs[String(id)];
                     return (
                       <tr key={id}>
@@ -86,6 +89,7 @@ export default function DiseasePage() {
                 </tbody>
               </table>
             </div>
+            <Pagination paged={paged} label="drugs" scrollTargetId="disease-drugs" />
           </>
         )}
     </div>

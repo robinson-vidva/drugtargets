@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useData } from '../data/DataContext';
 import type { GeneId, SimilarMap } from '../data/types';
+import { usePaged } from '../lib/usePaged';
+import { Pagination } from './Pagination';
 import { ScoreBar, EmptyState, Loading } from './common';
 
 function GeneChips({ ids, kind, genes }:
@@ -81,6 +83,7 @@ export function SimilarDrugs({ drugId }: { drugId: number }) {
   }, [loadSimilar]);
 
   const entries = useMemo(() => similar?.[String(drugId)] ?? [], [similar, drugId]);
+  const paged = usePaged(entries, 15);
 
   return (
     <>
@@ -104,20 +107,20 @@ export function SimilarDrugs({ drugId }: { drugId: number }) {
         : (
           <>
             {showNet && genes && drugs && <EgoNetwork drugId={drugId} entries={entries} />}
-            <div className="table-wrap">
+            <div className="table-wrap" id="similar-drugs">
               <table>
                 <thead>
                   <tr><th>#</th><th>Drug</th><th>Similarity</th>
                     <th>Concordant targets</th><th>Discordant targets</th></tr>
                 </thead>
                 <tbody>
-                  {entries.map((e, i) => {
+                  {paged.pageItems.map((e, i) => {
                     const [other, score, conc, disc] = e;
                     const d = drugs![String(other)];
                     if (!d) return null;
                     return (
                       <tr key={other}>
-                        <td className="muted">{i + 1}</td>
+                        <td className="muted">{paged.from + i}</td>
                         <td><Link to={`/drug/${encodeURIComponent(d.chembl)}`}>{d.name}</Link>
                           <div className="muted mono" style={{ fontSize: '0.8rem' }}>{d.chembl}</div></td>
                         <td><ScoreBar value={score} /></td>
@@ -129,6 +132,7 @@ export function SimilarDrugs({ drugId }: { drugId: number }) {
                 </tbody>
               </table>
             </div>
+            <Pagination paged={paged} label="similar drugs" scrollTargetId="similar-drugs" />
           </>
         )}
     </>

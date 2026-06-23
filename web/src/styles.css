@@ -168,6 +168,26 @@ tbody tr:last-child td { border-bottom: none; }
 .scorebar .fill { height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
 .scorebar .val { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.85rem; min-width: 40px; text-align: right; }
 
+/* Pagination */
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; margin: 12px 0 4px; }
+.pager-info { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.pager-btns { display: inline-flex; align-items: center; gap: 4px; }
+.pager-btn { min-width: 32px; height: 32px; padding: 0 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); border-radius: 8px; cursor: pointer;
+  font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.pager-btn:hover:not(:disabled) { border-color: var(--accent); }
+.pager-btn.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.pager-btn:disabled { opacity: 0.4; cursor: default; }
+.pager-ellipsis { color: var(--muted); padding: 0 2px; }
+
+/* Back to top */
+.to-top { position: fixed; right: 22px; bottom: 22px; z-index: 60; width: 42px; height: 42px;
+  border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 1.1rem; cursor: pointer; box-shadow: 0 6px 20px rgba(20,30,55,0.16);
+  display: flex; align-items: center; justify-content: center; transition: opacity 0.2s, transform 0.2s; }
+.to-top:hover { border-color: var(--accent); transform: translateY(-2px); }
+
 /* Disclaimer */
 .disclaimer {
   border: 1px solid var(--amber); background: var(--amber-bg);
